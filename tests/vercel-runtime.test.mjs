@@ -48,11 +48,16 @@ test('Vercel rewrite restores API paths without accepting arbitrary or duplicate
     restorePublicApiPath(req); assert.equal(req.url, path);
     const original = { url: path + '?__router_path=' + encodeURIComponent(path) };
     restorePublicApiPath(original); assert.equal(original.url, path);
+    if (path.startsWith('/v1/')) {
+      const wildcard = { url: path + '?__router_path=' + encodeURIComponent(path) + '&path=' + encodeURIComponent(path.slice(4)) };
+      restorePublicApiPath(wildcard); assert.equal(wildcard.url, path);
+    }
   }
   for (const url of ['/api/router', '/api/router?__router_path=/v1/config&extra=1',
     '/api/router?__router_path=/v1/config&__router_path=/v1/capabilities',
     '/api/router?__router_path=https://evil.example', '/api/router?__router_path=/../.dev/apps.json',
-    '/api/router?__router_path=/v1/config%3Fevil=1']) {
+    '/api/router?__router_path=/v1/config%3Fevil=1', '/v1/config?__router_path=/v1/config&path=executions',
+    '/v1/config?__router_path=/v1/config&path=config&path=config']) {
     const req = { url }; restorePublicApiPath(req); assert.equal(req.url, url);
   }
 });

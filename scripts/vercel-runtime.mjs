@@ -64,12 +64,13 @@ export function normalizePublicRequest(req, allowedOrigins) {
 export function restorePublicApiPath(req) {
   const url = new URL(req.url, 'https://router.invalid');
   const entries = [...url.searchParams];
-  console.info('PUBLIC_ROUTE_ENVELOPE', JSON.stringify({
-    parameters: entries.map(([name]) => name.slice(0, 64)),
-    rewriteMatchesPath: url.searchParams.get('__router_path') === url.pathname,
-  }));
-  if (entries.length !== 1 || entries[0][0] !== '__router_path') return;
-  const path = entries[0][1];
+  if (url.searchParams.getAll('__router_path').length !== 1) return;
+  const path = url.searchParams.get('__router_path');
+  // Vercel also forwards the named wildcard capture as `path`. Accept only
+  // that exact matching capture, never caller-supplied extra query fields.
+  const capture = entries.length === 2 && url.searchParams.getAll('path').length === 1 &&
+    path.startsWith('/v1/') && url.searchParams.get('path') === path.slice(4);
+  if (!(entries.length === 1 || capture)) return;
   if (url.pathname !== '/api/router' && url.pathname !== path) return;
   if (path !== '/healthz' && !/^\/v1\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+){0,2}$/.test(path)) return;
   req.url = path;

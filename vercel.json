@@ -1,0 +1,31 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "public",
+  "installCommand": "npm ci --ignore-scripts",
+  "regions": ["iad1"],
+  "functions": {
+    "api/router.mjs": {
+      "maxDuration": 240,
+      "includeFiles": "{packages/core/dist/**,packages/engine/src/**,packages/server/src/**,config/base-execution-pins.json}"
+    }
+  },
+  "rewrites": [
+    { "source": "/v1/:path*", "destination": "/api/router" },
+    { "source": "/healthz", "destination": "/api/router" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}

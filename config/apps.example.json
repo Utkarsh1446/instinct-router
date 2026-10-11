@@ -1,0 +1,14 @@
+{
+  "apps": [
+    {
+      "id": "instinct",
+      "publishableKey": "router_test_public_instinct",
+      "serverKey": "REPLACE_WITH_RANDOM_SERVER_CREDENTIAL",
+      "allowedOrigins": [
+        "http://127.0.0.1:8792"
+      ],
+      "rateLimitPerMinute": 30,
+      "maxConcurrent": 2
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@instinct/router-engine",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.mjs"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "@instinct/router-core": "0.1.0",
+    "viem": "2.56.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

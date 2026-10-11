@@ -1,0 +1,21 @@
+{
+  "name": "instinct-router-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --import ./scripts/workspace-loader.mjs --test packages/core/test/*.test.ts packages/engine/test/*.test.mjs packages/server/test/*.test.mjs packages/sdk/test/*.test.js tests/*.test.mjs",
+    "start": "node --import ./scripts/workspace-loader.mjs scripts/start.mjs",
+    "example": "node scripts/example-server.mjs",
+    "pack": "node scripts/pack.mjs",
+    "init:dev": "node scripts/init-dev.mjs",
+    "build:vercel": "node scripts/build.mjs && node scripts/build-public.mjs"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

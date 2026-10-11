@@ -1,0 +1,10 @@
+.git/
+.dev/
+output/
+artifacts/
+docs/validation/
+.env*
+*.log
+*.tgz
+node_modules/
+public/

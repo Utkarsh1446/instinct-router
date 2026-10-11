@@ -1,0 +1,9 @@
+{
+  "independentRoutes": false,
+  "debridgeRoutes": false,
+  "auroraPolicy": {},
+  "chainTiming": {
+    "eip155:8453": { "sourceConfirmationMs": 24000, "destinationVerificationMs": 24000 },
+    "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": { "sourceConfirmationMs": 24000, "destinationVerificationMs": 24000 }
+  }
+}

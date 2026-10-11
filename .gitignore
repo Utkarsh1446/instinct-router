@@ -1,0 +1,14 @@
+.dev/
+node_modules/
+artifacts/
+*.tgz
+output/
+public/
+packages/core/dist/
+docs/validation/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.vercel

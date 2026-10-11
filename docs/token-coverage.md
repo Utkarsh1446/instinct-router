@@ -1,0 +1,13 @@
+# Token and chain coverage
+
+Token presets are suggestions, not a token allowlist. The widget accepts a selected chain and a contract address (EVM) or mint address (Solana). It resolves precision before requesting prices; it never guesses decimals from the token symbol. Tokenized stocks use their chain and contract identity like other tokens, subject to venue liquidity and token transfer restrictions.
+
+The local host discovers additional enabled EVM chains from Relay's fixed [chain directory](https://docs.relay.link/references/api/get-chains) at startup. Provider protocol identifiers are taken from explicit mappings, not inferred from display names. Discovery does not import RPC URLs, contracts, signers, approvals or executable wallet payloads. Solana mainnet and the original configured chains retain their existing identities. Operators can disable startup discovery with `discoverChains: false` in the owner-only provider policy file. A discovery outage leaves the configured chains available.
+
+Custom EVM metadata is matched by the exact chain and contract through the fixed [currency lookup](https://docs.relay.link/references/api/get-currencies-v2). It is labelled `PROVIDER_CATALOG`, distinct from Solana's `FINALIZED_CHAIN` evidence and configured token pins. An absent EVM listing permits explicitly entered decimals for previews; malformed, mismatched or unavailable responses are errors. Changing the token or chain clears prior precision. A metadata result is never permission to execute a trade.
+
+There is no universal promise of liquidity or execution. New provider chains can produce price previews; unknown complete fees or settlement timing cannot win a validated comparison. Non-EVM families beyond the existing Solana implementation need their own wallet, address, transaction and settlement adapters. Bitcoin, Cosmos, Sui and other families are not silently treated as EVM chains.
+
+`execution.supportedRoutes` remains the authoritative set of executable pairs. Currently these are Base ETH to Base USDC, Base ETH to Solana USDC, and Base USDC to Solana USDC. Supporting arbitrary tokens and more source/destination chains in real trades requires additional reviewed recipes with exact token amounts and recipients, finite approvals, simulation, chain-specific gas checks, independent destination credit verification and recovery for uncertain transfers. Discovered tokens cannot bypass those requirements.
+
+The optional fee-percentage and native-gas ceilings are blank in the test widget. Explicit `null` disables only those caller ceilings. Fees still appear in route comparisons, and every executable review retains a finite fresh gas estimate, minimum output, balance checks and wallet approval.

@@ -1,0 +1,58 @@
+{
+  "base": {
+    "weth": {
+      "codeSha256": "667c900c2c6da80d452501a9c6332e046384a0c438c3334ce6f71c86dd7b8735"
+    },
+    "usdc": {
+      "codeSha256": "98d785fcb1bf847f287adc2310759fd94cc13e754b974bc72131382e8266f607",
+      "implementation": {
+        "slot": "0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3",
+        "address": "0x2ce6311ddae708829bc0784c967b7d77d19fd779",
+        "codeSha256": "dcb3b7ca28662970d0a7cdad420e529fb837d7bf8a246b1a680c20e153db79e8"
+      }
+    },
+    "oracle": {
+      "codeSha256": "5dcd6f463e4a502836560cbd1e7e4dd3eb37d3282b1c14f70bb31ff8c35ca112",
+      "implementation": {
+        "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+        "address": "0x4f1db3c6abd250ba86e0928471a8f7db3afd88f1",
+        "codeSha256": "7e49db5c1d54bab9a75a387dc972d4fb1c3c78f3fbf31336a9d8413d6d125cc3"
+      }
+    },
+    "factory": {
+      "codeSha256": "8545609892cc8d7d608dd4420ee110ab98448730570824fb029228e33846d28c"
+    }
+  },
+  "relay": {
+    "depository": {
+      "codeSha256": "e1aba2f59c0b4f5838d6f283db6e09631ef58f558107b7d42000c7f1252d1eda",
+      "owner": "0xf61a305199fa1135d76ffab3752d42f55cbd775a",
+      "allocator": "0x63c1d3e9c646184529c5694630a01c00df171b56"
+    },
+    "solver": "0xf70da97812cb96acdf810712aa562db8dfa3dbef",
+    "solanaSolverSigners": [
+      "F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe"
+    ]
+  },
+  "solanaRelay": {
+    "solver": "0xf70da97812cb96acdf810712aa562db8dfa3dbef",
+    "program": {
+      "address": "99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2",
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "codeSha256": "cd031c72891806feda109eec76f12877d05cafcf3b44b2d5c53d686756c7cee1",
+      "programData": {
+        "address": "6y7C7Lfh1WRRbKohE2FQmFBD2asw3yMi17kStwEcAWWF",
+        "codeSha256": "e9a2015b0f5f16a8270ba91cce4eadae3f57198ed2bcb8ef43d19b9b07821e18"
+      }
+    },
+    "config": {
+      "address": "Dodg2HifwU8rmaVVyMyUZDGTRbqAJTyVYxXPwcbNpBKc",
+      "owner": "6Bz8AWWipCDf7XCSqNuRXrEtKZM5M4Y56uP9ZRjSaMWD",
+      "allocator": "HuAjVESMnrR2wuthKHeAsJeDsfN2jKUEi7TCcZC7eW6Z"
+    },
+    "vault": "7uTT8Xi5RWXzy7h9XL244GRgEycDYDhLjr3ZyNdXi8pZ"
+  },
+  "providerManaged": {
+    "enabled": true
+  }
+}

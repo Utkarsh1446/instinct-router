@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instinct Router · Swap</title>
+<link rel="stylesheet" href="/asset-picker.css">
+<style>
+  :root{color-scheme:dark;font:15px system-ui,sans-serif;background:#111215;color:#ededee}
+  *{box-sizing:border-box}body{margin:0;padding:36px 16px}main{max-width:480px;margin:auto}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}h1{font-size:22px;margin:0}h2{font-size:18px;margin:0 0 16px}
+  .badge{font-size:11px;border:1px solid #45474d;border-radius:30px;padding:6px 10px;color:#c6c9cf}
+  .panel{background:#1b1d22;border:1px solid #33363e;border-radius:24px;padding:20px}.token-box{background:#24272e;border-radius:16px;padding:16px;margin:8px 0}.token-box .field{margin:0 0 10px}
+  p{line-height:1.5;color:#aeb4c0}.field{display:block;margin:14px 0}label{font-size:12px;color:#bec4d0}
+  input,select{width:100%;padding:11px;border:1px solid #41454f;border-radius:10px;background:#14161b;color:#f3f3f4;margin-top:6px;font:inherit;min-width:0}
+  #amount{font-size:30px;background:transparent;padding:4px 0;border:0;margin-top:8px;outline-offset:4px}#amount::placeholder{color:#777e8b}.direction{text-align:center;color:#b1b8c5;font-size:23px;margin:-5px 0}
+  button{font:inherit;border:0;border-radius:14px;background:#d8ff69;color:#182105;font-weight:650;padding:15px;width:100%;cursor:pointer;margin-top:10px}button:disabled{opacity:.45;cursor:not-allowed}
+  .secondary{background:#333844;color:#e4e8f0}.text-button{width:auto;background:transparent;color:#d8ff69;padding:4px 0;font-size:12px;margin-top:4px}.muted{font-size:12px;color:#a7adba;overflow-wrap:anywhere}
+  .wallet-row{display:flex;gap:8px;align-items:center}.wallet-row select{flex:1}.wallet-row .text-button{flex:none}.wallet-row select:empty{display:none}
+  .widget-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.widget-heading h2{margin:0}.widget-heading select{max-width:170px;font-size:12px;margin:0;padding:8px}.widget-heading select:empty{display:none}
+  #source-wallet-status{margin:7px 0 15px}#destination-wallet-status{margin:5px 0}#swap-next-step{margin:12px 0 0}#wallet-status{margin:10px 0 0}#wallet-status[data-error=true],#status[data-error=true]{color:#ffc1b6}
+  #execution-review p{margin:5px 0}#review-input-warning{color:#ffcf8d}
+  details{margin:14px 0;color:#aeb4c0}summary{cursor:pointer;font-size:12px}.custom[hidden],[hidden]{display:none!important}
+  #price-panel{margin:24px 0;padding:0 4px}.route{border:1px solid #404650;border-radius:14px;padding:14px;margin:12px 0}.chosen{border-color:#bad86a}.route strong{display:block;margin-bottom:8px}.route p{margin:4px 0;font-size:12px}
+  #status{font-size:12px;line-height:1.5;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;color:#adb6c8;max-height:280px;overflow:auto}.empty{color:#7f8796;font-size:13px}
+</style>
+<link rel="stylesheet" href="/trade-progress.css">
+<main>
+  <header><h1>Instinct Router</h1><span class="badge">Standalone</span></header>
+  <form class="panel" id="quote-form">
+    <div class="widget-heading"><h2>Swap</h2><select id="source-wallet-provider" aria-label="Source wallet"></select></div>
+    <button id="source-wallet-connect" type="button" hidden disabled>Connect wallet</button>
+    <select id="source-wallet-account" aria-label="Choose source wallet account" hidden></select>
+    <button id="source-wallet-select-account" type="button" hidden>Use selected source account</button>
+    <p id="source-wallet-status" class="muted" role="status"></p>
+    <div class="token-box">
+      <div class="token-heading"><span id="source-token-label">You pay</span>
+        <button id="source-token-picker" class="token-picker-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Select payment token">
+          <span id="source-token-icon" class="token-picker-icon" aria-hidden="true">T</span>
+          <span class="token-picker-label"><span id="source-token-symbol" class="token-picker-symbol">Select token</span><span id="source-token-name" class="token-picker-name"></span></span>
+          <span id="source-token-chain" class="token-picker-chain">Network</span><span class="token-picker-arrow" aria-hidden="true">⌄</span>
+        </button>
+      </div>
+      <select id="source" aria-label="You pay token" required hidden></select>
+      <label>Amount<input id="amount" placeholder="0.00" inputmode="decimal" autocomplete="off" required></label>
+      <p id="source-balance" class="asset-balance" role="status" aria-live="polite">Connect a wallet to see balance</p>
+      <div class="custom" id="source-custom" hidden>
+        <label class="field">Source chain<select id="source-chain"></select></label>
+        <label class="field">Contract or mint address<input id="source-address" autocomplete="off"></label>
+        <label class="field">Decimals<input id="source-decimals" type="number" min="0" max="255" placeholder="Resolved automatically"></label>
+        <p id="source-token-help" class="muted" role="status"></p>
+      </div>
+    </div>
+    <div class="direction" aria-hidden="true">↓</div>
+    <div class="token-box">
+      <div class="token-heading"><span id="destination-token-label">You receive</span>
+        <button id="destination-token-picker" class="token-picker-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Select receiving token">
+          <span id="destination-token-icon" class="token-picker-icon" aria-hidden="true">T</span>
+          <span class="token-picker-label"><span id="destination-token-symbol" class="token-picker-symbol">Select token</span><span id="destination-token-name" class="token-picker-name"></span></span>
+          <span id="destination-token-chain" class="token-picker-chain">Network</span><span class="token-picker-arrow" aria-hidden="true">⌄</span>
+        </button>
+      </div>
+      <select id="destination" aria-label="You receive token" required hidden></select>
+      <p id="destination-balance" class="asset-balance" role="status" aria-live="polite">Connect a wallet to see balance</p>
+      <div class="custom" id="destination-custom" hidden>
+        <label class="field">Destination chain<select id="destination-chain"></select></label>
+        <label class="field">Contract or mint address<input id="destination-address" autocomplete="off"></label>
+        <label class="field">Decimals<input id="destination-decimals" type="number" min="0" max="255" placeholder="Resolved automatically"></label>
+        <p id="destination-token-help" class="muted" role="status"></p>
+      </div>
+    </div>
+    <label class="field">Receive at<input id="recipient" placeholder="Destination wallet address" autocomplete="off" spellcheck="false" required></label>
+    <div class="wallet-row">
+      <select id="destination-wallet-provider" aria-label="Destination wallet provider"></select>
+      <button id="destination-wallet-connect" type="button" class="text-button" disabled>Connect receiving wallet</button>
+    </div>
+    <select id="destination-wallet-account" aria-label="Choose destination wallet account" hidden></select>
+    <button id="destination-wallet-select-account" type="button" hidden>Use selected destination account</button>
+    <button id="destination-use-source" type="button" class="text-button" disabled>Use source address</button>
+    <p id="destination-wallet-status" class="muted" role="status"></p>
+    <details>
+      <summary>Settings</summary>
+      <label class="field">Slippage limit (%)<input id="slippage" value="0.50" type="number" min="0" max="5" step="0.01" required></label>
+      <label class="field">Maximum fee estimate (%) · optional<input id="max-fee" placeholder="No preset limit" type="number" min="0" max="100" step="0.01"></label>
+      <label class="field">Native fee reserve limit (source native token) · optional<input id="native-budget" inputmode="decimal" placeholder="Automatic fresh gas reserve"></label>
+      <label class="field">Prefer<select id="objective"><option value="BALANCED">Balanced</option><option value="FASTEST">Fastest</option><option value="BEST_OUTPUT">Best output</option></select></label>
+      <label class="field">Route sources<select id="route-scope"><option value="ALL">All sources</option><option id="independent-option" value="INDEPENDENT" disabled>DEX + bridge</option></select></label>
+      <label class="field">Sender address (manual entry is for previews)<input id="sender" autocomplete="off" spellcheck="false" required></label>
+    </details>
+    <div id="execution-review" class="muted" aria-live="polite"></div>
+    <p id="review-input-warning" class="muted" hidden>The inputs changed. Cancel the old review before requesting fresh terms.</p>
+    <p id="swap-next-step" class="muted" role="status">Checking wallet and trade availability…</p>
+    <button id="swap-primary" type="button" aria-describedby="swap-next-step" disabled>Loading…</button>
+    <p id="wallet-status" class="muted" role="status"></p>
+    <button id="submit" hidden disabled>Refresh price previews</button>
+    <button id="inspect" type="button" hidden>Check wallet readiness</button>
+    <button id="cancel" type="button" hidden>Cancel request</button>
+    <button id="wallet-verify" type="button" disabled hidden>Verify source wallet ownership</button>
+    <button id="execution-prepare" type="button" disabled hidden>Prepare trade review</button>
+    <button id="execution-continue" type="button" disabled hidden>Review exact wallet action</button>
+    <button id="execution-resume" type="button" disabled hidden>Resume saved trade status</button>
+    <button id="execution-cancel" type="button" disabled hidden>Cancel unclaimed review</button>
+    <div id="exact-action" hidden><pre id="exact-action-data"></pre><button id="wallet-confirm" type="button">Confirm</button><button id="wallet-decline" type="button">Decline</button></div>
+  </form>
+  <button id="settlement-stop" type="button" class="text-button" hidden>Stop status checks</button>
+  <section id="price-panel" aria-live="polite" hidden>
+    <h2>Routes</h2>
+    <p id="execution-support" class="muted" hidden></p>
+    <p id="status" role="status"></p>
+    <p class="muted" id="timings" hidden></p>
+    <div id="routes"></div>
+    <div id="readiness" hidden></div>
+    <pre id="response" hidden></pre>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</html>

@@ -64,6 +64,10 @@ export function normalizePublicRequest(req, allowedOrigins) {
 export function restorePublicApiPath(req) {
   const url = new URL(req.url, 'https://router.invalid');
   const entries = [...url.searchParams];
+  if (url.pathname.startsWith('/v1/')) console.info('PUBLIC_ROUTE_ENVELOPE', JSON.stringify({
+    parameters: entries.map(([name]) => name.slice(0, 64)),
+    rewriteMatchesPath: url.searchParams.get('__router_path') === url.pathname,
+  }));
   if (entries.length !== 1 || entries[0][0] !== '__router_path') return;
   const path = entries[0][1];
   if (url.pathname !== '/api/router' && url.pathname !== path) return;

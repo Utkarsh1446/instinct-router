@@ -46,6 +46,8 @@ test('Vercel rewrite restores API paths without accepting arbitrary or duplicate
   for (const path of ['/healthz', '/v1/config', '/v1/executions/ex_123/refresh']) {
     const req = { url: '/api/router?__router_path=' + encodeURIComponent(path) };
     restorePublicApiPath(req); assert.equal(req.url, path);
+    const original = { url: path + '?__router_path=' + encodeURIComponent(path) };
+    restorePublicApiPath(original); assert.equal(original.url, path);
   }
   for (const url of ['/api/router', '/api/router?__router_path=/v1/config&extra=1',
     '/api/router?__router_path=/v1/config&__router_path=/v1/capabilities',

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
+import { setTimeout as delay } from 'node:timers/promises';
 import { encodeBase58 } from '../packages/sdk/src/wallets.js';
 import { payloadHash } from '../packages/sdk/src/execution-validation.js';
 
@@ -119,7 +120,16 @@ async function setup({supported = true, storage = new Map(), usdc = false, noPre
     }};
 }
 const tick = () => new Promise(resolve=>setImmediate(resolve));
-async function until(predicate) { for (let i=0;i<50;i++) { if(predicate()) return; await tick(); } assert.fail('Expected UI state did not arrive'); }
+async function until(predicate) {
+  // Crypto work and browser state transitions may complete on worker threads.
+  // Yield real time rather than limiting them to a machine-dependent spin count.
+  const deadline = performance.now() + 5000;
+  while (!predicate()) {
+    const remaining = deadline - performance.now();
+    assert.ok(remaining > 0, 'Expected UI state did not arrive within 5000 ms');
+    await delay(Math.min(10, remaining));
+  }
+}
 async function stopAfterSubmission(f,pending) { await until(()=>f.saved()?.phase === 'SUBMITTED' && !f.$('settlement-stop').hidden); f.$('settlement-stop').click(); await pending; }
 
 async function reachReview(f) {

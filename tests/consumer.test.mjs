@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, lstat, rm, access } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,15 +16,32 @@ test('packed modules work outside the workspace without aliases, credentials, or
   t.after(() => rm(dir, { recursive: true, force: true }));
   const artifacts = join(dir, 'artifacts'); await mkdir(artifacts);
   const dependencies = {};
+  const workspaceLock = JSON.parse(await readFile(join(root, 'package-lock.json'), 'utf8'));
+  // Reuse the exact third-party tarballs/integrities that root npm ci cached.
+  // Workspace links are replaced below with freshly packed, integrity-bound archives.
+  const lockedPackages = Object.fromEntries(Object.entries(workspaceLock.packages)
+    .filter(([path, entry]) => path.startsWith('node_modules/') && !entry.link));
   for (const name of ['core', 'engine', 'server', 'sdk']) {
     const details = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', artifacts], join(root, 'packages', name)))[0];
     for (const file of details.files) assert.doesNotMatch(file.path, /(?:^|\/)(?:\.dev|node_modules|test|tests)\/|provider-keys|burner|\.env/);
-    dependencies['@instinct/router-' + name] = 'file:' + join(artifacts, details.filename);
+    const packageName = '@instinct/router-' + name;
+    dependencies[packageName] = 'file:' + join(artifacts, details.filename);
+    const manifest = JSON.parse(await readFile(join(root, 'packages', name, 'package.json'), 'utf8'));
+    lockedPackages['node_modules/' + packageName] = {
+      version: manifest.version, resolved: dependencies[packageName], integrity: details.integrity,
+      ...(manifest.dependencies ? { dependencies: manifest.dependencies } : {}),
+      ...(manifest.engines ? { engines: manifest.engines } : {}),
+    };
   }
   await writeFile(join(dir, 'package.json'), JSON.stringify({ private: true, type: 'module', dependencies }));
-  // Resolve the real archive dependency graph from the workspace installation's
-  // npm cache. This test never contacts a registry or runs package scripts.
-  run('npm', ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund'], dir);
+  await writeFile(join(dir, 'package-lock.json'), JSON.stringify({
+    lockfileVersion: 3, requires: true, packages: { '': { dependencies }, ...lockedPackages },
+  }));
+  // A fresh npm ci cache contains the locked tarballs but need not contain registry
+  // metadata. Installing from this isolated lock stays reproducible and offline.
+  run('npm', ['ci', '--offline', '--ignore-scripts', '--no-audit', '--no-fund'], dir);
+  for (const name of Object.keys(dependencies))
+    assert.equal((await lstat(join(dir, 'node_modules', name))).isSymbolicLink(), false);
   const sample = `
     import assert from 'node:assert/strict';
     import { RouterRuntime, WalletExecutionCoordinator } from '@instinct/router-core';
@@ -81,5 +98,5 @@ test('packed modules work outside the workspace without aliases, credentials, or
     void durable; void inspect; void runtime; void serverClient; void quote; void progressive; const coreShape: Partial<RouterRequest> = {amountRaw:'1'}; void coreShape;
   `);
   run(process.execPath, [compiler, '--noEmit', '--strict', '--target', 'ES2022', '--lib', 'ES2023,DOM', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--types', 'node', '--typeRoots', nodeTypes, 'consumer.ts'], dir);
-  t.diagnostic('Strict TypeScript consumer check passed; archive dependencies installed offline from the existing cache.');
+  t.diagnostic('Strict TypeScript consumer check passed; archive dependencies installed offline from locked cache tarballs.');
 });

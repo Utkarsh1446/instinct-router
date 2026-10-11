@@ -13,6 +13,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Install Redis integration test binaries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends redis-server
+          redis-server --version
+          redis-cli --version
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm test

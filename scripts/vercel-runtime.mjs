@@ -63,10 +63,10 @@ export function normalizePublicRequest(req, allowedOrigins) {
  * placed in its rewrite query, rejecting extra/duplicate query parameters. */
 export function restorePublicApiPath(req) {
   const url = new URL(req.url, 'https://router.invalid');
-  if (url.pathname !== '/api/router') return;
   const entries = [...url.searchParams];
   if (entries.length !== 1 || entries[0][0] !== '__router_path') return;
   const path = entries[0][1];
+  if (url.pathname !== '/api/router' && url.pathname !== path) return;
   if (path !== '/healthz' && !/^\/v1\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+){0,2}$/.test(path)) return;
   req.url = path;
 }

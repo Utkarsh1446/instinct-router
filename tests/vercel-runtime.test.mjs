@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadPublicRuntimeConfig, normalizePublicRequest, vercelClientKey } from '../scripts/vercel-runtime.mjs';
+import { loadPublicRuntimeConfig, normalizePublicRequest, restorePublicApiPath, vercelClientKey } from '../scripts/vercel-runtime.mjs';
 
 const environment = () => ({ VERCEL: '1', VERCEL_ENV: 'production', ROUTER_PUBLIC_ORIGIN: 'https://router.example.com',
   VERCEL_URL: 'router-release.vercel.app', ROUTER_PUBLIC_APP_KEY: 'router_public_test_1234567890',
@@ -40,4 +40,17 @@ test('Vercel rate key accepts a single edge-provided IP, rejects spoofable chain
   for (const value of [undefined, '', 'client', '192.0.2.1, 192.0.2.2']) assert.throws(() => vercelClientKey({ req: request(value === undefined ? {} : { 'x-forwarded-for': value }) }));
   const duplicate = request({ 'x-forwarded-for': '192.0.2.1' }); duplicate.rawHeaders.push('X-Forwarded-For', '192.0.2.2');
   assert.throws(() => vercelClientKey({ req: duplicate }));
+});
+
+test('Vercel rewrite restores API paths without accepting arbitrary or duplicate query parameters', () => {
+  for (const path of ['/healthz', '/v1/config', '/v1/executions/ex_123/refresh']) {
+    const req = { url: '/api/router?__router_path=' + encodeURIComponent(path) };
+    restorePublicApiPath(req); assert.equal(req.url, path);
+  }
+  for (const url of ['/api/router', '/api/router?__router_path=/v1/config&extra=1',
+    '/api/router?__router_path=/v1/config&__router_path=/v1/capabilities',
+    '/api/router?__router_path=https://evil.example', '/api/router?__router_path=/../.dev/apps.json',
+    '/api/router?__router_path=/v1/config%3Fevil=1']) {
+    const req = { url }; restorePublicApiPath(req); assert.equal(req.url, url);
+  }
 });

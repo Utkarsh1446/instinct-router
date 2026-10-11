@@ -12,8 +12,8 @@
     }
   },
   "rewrites": [
-    { "source": "/v1/:path*", "destination": "/api/router" },
-    { "source": "/healthz", "destination": "/api/router" }
+    { "source": "/v1/:path*", "destination": "/api/router?__router_path=/v1/:path*" },
+    { "source": "/healthz", "destination": "/api/router?__router_path=/healthz" }
   ],
   "headers": [
     {

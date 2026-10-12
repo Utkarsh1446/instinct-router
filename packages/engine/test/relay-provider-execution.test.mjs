@@ -30,6 +30,25 @@ test('legacy and OP fee modes are explicit and reserve all observed components',
  const legacy=fixture({legacy:true}),q=await legacy.engine.prepare(legacy.request);
  assert.equal(q.plan.actions[0].payload.transaction.type,'0x0');assert.ok(q.plan.actions[0].payload.transaction.gasPrice);assert.equal((await legacy.engine.preflight(q.plan,q.plan.actions[0])).ready,true);
 });
+test('uncovered native input or provider gas floor reports insufficient balance before simulation',async()=>{
+ for(const token of [false,true]){
+  const f=fixture({token,approval:token}),input=token?0n:BigInt(f.request.amountRaw),floor=BigInt(f.raw.fees.gas.amount);
+  f.balance(input+floor-1n);f.failSim();
+  await assert.rejects(f.engine.prepare(f.request),e=>e.code==='EXECUTION_NATIVE_BALANCE_INSUFFICIENT');
+  assert.ok(f.calls.some(c=>c.method==='eth_getBalance'&&c.params[1].requireCanonical));
+  assert.equal(f.calls.some(c=>['eth_estimateGas','eth_call','eth_maxPriorityFeePerGas'].includes(c.method)),false);
+ }
+});
+test('fresh preflight checks the remaining native input and all fee caps before simulation',async()=>{
+ for(const token of [false,true]){
+  const f=fixture({token,approval:token}),q=await f.engine.prepare(f.request);
+  const cap=q.plan.actions.reduce((n,a)=>n+BigInt(a.payload.spending.nativeFeeCapRaw),0n);
+  f.calls.length=0;f.balance((token?0n:BigInt(f.request.amountRaw))+cap-1n);f.failSim();
+  await assert.rejects(f.engine.preflight(q.plan,q.plan.actions[0]),e=>e.code==='EXECUTION_NATIVE_BALANCE_INSUFFICIENT');
+  assert.ok(f.calls.some(c=>c.method==='eth_getBalance'&&c.params[1].requireCanonical));
+  assert.equal(f.calls.some(c=>['eth_estimateGas','eth_call'].includes(c.method)),false);
+ }
+});
 test('untrusted targets, signature steps, deposit addresses and changed RFQ economics fail closed',async()=>{
  for(const mutate of [f=>f.raw.steps[0].items[0].data.to=TOKEN,f=>f.raw.steps[0].kind='signature',f=>f.raw.steps[0].depositAddress=ROUTER,f=>f.raw.details.currencyOut.currency.address=ZERO,f=>f.raw.details.currencyOut.minimumAmount='99499',f=>f.raw.fees.gas.currency.address=TOKEN,f=>f.raw.steps[0].items[0].data.value='1']){
   const f=fixture();mutate(f);await assert.rejects(f.engine.prepare(f.request));

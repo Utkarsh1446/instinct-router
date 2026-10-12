@@ -2,7 +2,7 @@ import { ApiError, fault, single } from './security.mjs';
 import { parseStrictJson } from './strict-json.mjs';
 import { performance } from 'node:perf_hooks';
 
-export const baseHeaders = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+export const baseHeaders = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Access-Control-Expose-Headers': 'Date, X-Request-Id',
   'Referrer-Policy': 'no-referrer', Vary: 'Origin' };
 export function send(res, status, value, origin, extra = {}) {
   if (res.destroyed || res.writableEnded) return;

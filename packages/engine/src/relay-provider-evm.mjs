@@ -31,6 +31,11 @@ export async function prepareEvm({request,terms,chain,read,signal,now}){
  const header=freshHeader(latest,now()),block={blockHash:header.hash,requireCanonical:true};
  const [walletCode,balance,targetIdentity]=await together([read('eth_getCode',[request.sender,block],signal),read('eth_getBalance',[request.sender,block],signal),identity(read,tx.to,block,signal)]);
  if(walletCode!=='0x')fail('RELAY_PROVIDER_WALLET_UNSUPPORTED');
+ const providerFull=units(terms.providerFullGasEstimateRaw);
+ if(!providerFull)fail('RELAY_PROVIDER_FEES_UNKNOWN');
+ // Reject an uncovered input/gas floor before simulation: RPC nodes otherwise
+ // return an insufficient-funds error that looks like unavailable evidence.
+ if(quantity(balance)<(native?units(request.amountRaw):0n)+providerFull)fail('EXECUTION_NATIVE_BALANCE_INSUFFICIENT');
  let sourceIdentity,spenderIdentity,needsApproval=false,spender;
  if(!native){
   sourceIdentity=await identity(read,request.source.address,block,signal);
@@ -70,8 +75,7 @@ export async function prepareEvm({request,terms,chain,read,signal,now}){
   action.validation={targetIdentity:action.kind==='TOKEN_APPROVAL'?sourceIdentity:targetIdentity,...(sourceIdentity?{sourceIdentity,spender,spenderIdentity}:{}),simulationVerified:canSimulate,feeModel:chain.feeModel};
  }
  // Provider full-route gas is an explicit API estimate, not independent surcharge attestation.
- const providerFull=units(terms.providerFullGasEstimateRaw),prior=actions.slice(0,-1).reduce((n,a)=>n+BigInt(a.estimateRaw),0n),funding=actions.at(-1);
- if(!providerFull)fail('RELAY_PROVIDER_FEES_UNKNOWN');
+ const prior=actions.slice(0,-1).reduce((n,a)=>n+BigInt(a.estimateRaw),0n),funding=actions.at(-1);
  const providerFloor=providerFull>prior?providerFull-prior:0n;
  if(BigInt(funding.estimateRaw)<providerFloor)funding.estimateRaw=providerFloor.toString();
  for(const a of actions)a.validation.evidence={providerFullGasEstimateRaw:providerFull.toString(),providerGasFloorRaw:a===funding?providerFloor.toString():'0',feeTrust:chain.feeModel==='PROVIDER_ESTIMATE'?'PROVIDER_FULL_GAS_ESTIMATE':'RPC_AND_PROVIDER_ESTIMATE'};
@@ -100,6 +104,8 @@ export async function preflightEvm({plan,action,chain,read,signal,now}){
  if(header.baseFee!==null&&header.baseFee+quantity(tx.maxPriorityFeePerGas??'0x0')>quantity(tx.maxFeePerGas??tx.gasPrice))fail('EXECUTION_REVIEW_GAS_RESERVE_EXCEEDED');
  const [walletCode,balance,currentIdentity]=await together([read('eth_getCode',[plan.sender,block],signal),read('eth_getBalance',[plan.sender,block],signal),identity(read,tx.to,block,signal)]);
  if(walletCode!=='0x'||canonical(currentIdentity)!==canonical(v?.targetIdentity))fail('RELAY_PROVIDER_IDENTITY_CHANGED');
+ const position=plan.actions.findIndex(a=>a.id===action.id),remaining=plan.actions.slice(position).reduce((n,a)=>n+units(a.payload.spending.nativeFeeCapRaw),0n);
+ if(quantity(balance)<remaining+(native?units(plan.amountRaw):0n))fail('EXECUTION_NATIVE_BALANCE_INSUFFICIENT');
  if(!native){const sourceIdentity=eq(tx.to,plan.source.address)?currentIdentity:await identity(read,plan.source.address,block,signal);
   if(canonical(sourceIdentity)!==canonical(v.sourceIdentity))fail('RELAY_PROVIDER_IDENTITY_CHANGED');
   const spender=v.spender;if(!chain.allowedTargets.includes(spender))fail('RELAY_PROVIDER_BINDING_MISMATCH');
@@ -115,7 +121,5 @@ export async function preflightEvm({plan,action,chain,read,signal,now}){
  if(floor>full||full===0n||v.feeModel!==chain.feeModel)fail('RELAY_PROVIDER_BINDING_MISMATCH');
  const fee=rpcFee>floor?rpcFee:floor;
  if(fee>cap)fail('EXECUTION_REVIEW_GAS_RESERVE_EXCEEDED');
- const position=plan.actions.findIndex(a=>a.id===action.id),remaining=plan.actions.slice(position).reduce((n,a)=>n+units(a.payload.spending.nativeFeeCapRaw),0n);
- if(quantity(balance)<remaining+(native?units(plan.amountRaw):0n))fail('EXECUTION_NATIVE_BALANCE_INSUFFICIENT');
  await canonicalEnd(read,header,signal,now);return {ready:true};
 }

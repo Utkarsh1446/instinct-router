@@ -18,6 +18,15 @@ function candidateSnapshot(candidate) {
   const { eligible, ...rest } = candidate;
   return stable(rest); // Final ranking/expiry may change only eligibility.
 }
+function responseClock(response) {
+  const date = response.headers?.get('date'), parsed = Date.parse(date ?? '');
+  // HTTP Date comes from the authenticated router response, rather than the
+  // device clock. Use the end of its one-second precision and advance only
+  // monotonically so clock skew/changes cannot reject a valid five-minute TTL.
+  const stamp = Number.isFinite(parsed) && new Date(parsed).toUTCString() === date ? parsed + 999 : Date.now();
+  const started = performance.now();
+  return () => stamp + Math.max(0, performance.now() - started);
+}
 async function callback(fn, candidate, metadata, signal) {
   if (!fn) return;
   if (signal.aborted) throw new RouterSdkError('ABORTED', 'The router request was cancelled.');
@@ -35,6 +44,7 @@ async function callback(fn, candidate, metadata, signal) {
 
 /** Consume through clean EOF: COMPLETE is a snapshot, never early success or trade authorization. */
 export async function readQuoteStream(response, signal, checkDeadline, request, onCandidate, remoteError) {
+  const responseNow = responseClock(response);
   const check = () => { checkDeadline(); if (signal.aborted) throw new RouterSdkError('ABORTED', 'The router request was cancelled.'); };
   check();
   const declared = response.headers?.get('content-length');
@@ -76,7 +86,7 @@ export async function readQuoteStream(response, signal, checkDeadline, request, 
           value.quote.comparisonComplete !== value.comparisonComplete || value.quote.candidates.length !== seen.size ||
           typeof value.quote.requestHash !== 'string' || !/^[0-9a-f]{64}$/.test(value.quote.requestHash) ||
           !Number.isSafeInteger(value.quote.snapshotExpiresAtMs) || value.quote.snapshotExpiresAtMs < 0 ||
-          value.quote.snapshotExpiresAtMs > Date.now() + 300000 || value.quote.validUntilMs != null &&
+          value.quote.snapshotExpiresAtMs > responseNow() + 300000 || value.quote.validUntilMs != null &&
           (!Number.isSafeInteger(value.quote.validUntilMs) || value.quote.snapshotExpiresAtMs > value.quote.validUntilMs)) fail();
         for (const candidate of value.quote.candidates) {
           if (!seen.has(candidate.id) || candidateSnapshot(candidate) !== seen.get(candidate.id)) fail();
@@ -123,7 +133,7 @@ export async function readQuoteStream(response, signal, checkDeadline, request, 
     if (buffer.length || !terminal) fail(); // Every event must end in LF; EOF cannot truncate JSON or UTF8.
     completed = true;
     if (terminal.error) throw remoteError(terminal.error.error, terminal.error.requestId, response.status);
-    const quote = terminal.quote, now = Date.now();
+    const quote = terminal.quote, now = responseNow();
     const winner = quote.candidates.find(candidate => candidate.id === quote.winner);
     const deadlines = winner ? ['validUntilMs', 'deadlineMs'].filter(field => Object.hasOwn(winner, field)).map(field => winner[field]) : [];
     if (deadlines.some(value => !Number.isSafeInteger(value) || value < 0)) fail();

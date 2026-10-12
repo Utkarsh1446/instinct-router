@@ -200,3 +200,31 @@ test('EOF freshness checks only selected candidate deadlines and validates their
   noWinner[1].candidate.validUntilMs = Date.now() - 1; noWinner[2].quote.candidates[0].validUntilMs = noWinner[1].candidate.validUntilMs;
   assert.equal((await client(async () => response(noWinner)).quoteStream(input())).winner, null);
 });
+
+test('router HTTP Date tolerates device clock skew without relaxing quote TTL or expiry', async t => {
+  const stamp=Math.floor(Date.now()/1000)*1000,date=new Date(stamp).toUTCString();
+  const wall=t.mock.method(Date,'now',()=>stamp);
+  const serve=rows=>{
+    const result=response(rows);result.headers.set('Date',date);return result;
+  };
+  for(const offset of [-120000,120000]){
+    wall.mock.mockImplementation(()=>stamp+offset);
+    const rows=events(),quote=rows[2].quote;
+    quote.snapshotExpiresAtMs=stamp+300000;quote.validUntilMs=stamp+2400000;
+    assert.equal((await client(async()=>serve(rows)).quoteStream(input())).quoteId,'quote-test');
+    quote.snapshotExpiresAtMs=stamp+301100;
+    await assert.rejects(client(async()=>serve(rows)).quoteStream(input()),code('PROTOCOL_ERROR'));
+    quote.snapshotExpiresAtMs=stamp-1;
+    await assert.rejects(client(async()=>serve(rows)).quoteStream(input()),code('QUOTE_EXPIRED'));
+    quote.snapshotExpiresAtMs=stamp+60000;
+    rows[1].candidate.validUntilMs=stamp-1;quote.candidates[0].validUntilMs=stamp-1;
+    await assert.rejects(client(async()=>serve(rows)).quoteStream(input()),code('QUOTE_EXPIRED'));
+  }
+});
+test('missing or malformed HTTP Date retains bounded local-clock validation',async()=>{
+  for(const date of [null,'not-a-date','123']){
+    const rows=events();rows[2].quote.snapshotExpiresAtMs=Date.now()+400000;rows[2].quote.validUntilMs=Date.now()+400000;
+    const result=response(rows);if(date!==null)result.headers.set('Date',date);
+    await assert.rejects(client(async()=>result).quoteStream(input()),code('PROTOCOL_ERROR'));
+  }
+});

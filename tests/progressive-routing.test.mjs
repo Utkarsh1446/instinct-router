@@ -59,7 +59,8 @@ test('real SDK/API/engine exposes early routes and binds final DLN preview to it
   const api = createRouterApi({ service, apps: [app] });
   await new Promise(resolve => api.listen(0, '127.0.0.1', resolve));
   t.after(async () => { api.closeAllConnections(); await new Promise(resolve => api.close(resolve)); });
-  const client = createRouterServerClient({ baseUrl: `http://127.0.0.1:${api.address().port}`, serverKey: app.serverKey });
+  const client = createRouterServerClient({ baseUrl: `http://127.0.0.1:${api.address().port}`, serverKey: app.serverKey,
+    fetch:async(url,init)=>{const response=await fetch(url,init);assert.match(response.headers.get('access-control-expose-headers'),/\bDate\b/);assert.ok(Number.isFinite(Date.parse(response.headers.get('date'))));return response;} });
   let first; const arrived = new Promise(resolve => { first = resolve; });
   const candidates = []; let complete = false;
   const pending = client.quoteStream(input, { onCandidate(candidate, metadata) {

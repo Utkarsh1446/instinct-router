@@ -151,7 +151,8 @@ export function createPhantomWallet(provider, chainId = 'solana:mainnet') {
         if (decoded.feePayer !== account.address || decoded.blockhash !== transaction.blockhash || decoded.requiredSignatures !== 1) throw Error(); }
       } catch { fail('WALLET_RESPONSE_INVALID', 'The reviewed Solana transaction is invalid.'); }
       // Installed Phantom expects a complete unsigned transaction, including its empty signature slot.
-      // The reviewed message stays byte-for-byte unchanged; never retry with another wire format.
+      // Send the reviewed bytes unchanged. The receipt verifier separately
+      // checks any safety assertions added by the wallet; never retry submission.
       const result=await provider.request({method:'signAndSendTransaction',params:{message:transaction.serialized ?? encodeBase58(serializeUnsignedTransaction(transaction.message))}});
       await bound(account);
       try { decodeBase58(result?.signature,64); } catch { fail('WALLET_RESPONSE_INVALID', 'Submission status is unknown. Keep the recovery record.'); }

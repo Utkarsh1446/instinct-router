@@ -2,7 +2,8 @@
 import {ExecutionEngineError,fail} from './base-execution-checks.mjs';
 import {createReceiptIo} from './relay-provider-receipt-io.mjs';
 import {eq,quantity,amount,signature,hashFor,evmTokenCredit,evmNativeTraceCredit,solanaCredit} from './relay-provider-receipt-credit.mjs';
-import {encodeBase58,decodeBase58,SYSTEM_PROGRAM,TOKEN_PROGRAM} from './solana-message-codec.mjs';
+import {SYSTEM_PROGRAM,TOKEN_PROGRAM} from './solana-message-codec.mjs';
+import {verifySolanaReceiptBinding} from './solana-receipt-binding.mjs';
 const SOL_GENESIS='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 const OP_ORACLE='0x420000000000000000000000000000000000000F';
 const zero='0x'+'00'.repeat(20),hash=v=>typeof v==='string'&&/^0x[0-9a-f]{64}$/i.test(v);
@@ -10,8 +11,17 @@ const integer=v=>{if(!Number.isSafeInteger(v)||v<0)fail('EXECUTION_EVIDENCE_INVA
 const word=v=>BigInt(v).toString(16).padStart(64,'0');
 const raw=v=>typeof v==='string'&&v.startsWith('0x')?quantity(v):amount(String(v));
 const sameAsset=(a,b)=>a?.chainId===b?.chainId&&a?.decimals===b?.decimals&&(a?.chainId?.startsWith('eip155:')?eq(a.address,b.address):a?.address===b?.address);
-/** The message bytes are preserved for legacy and v0 transactions, including resolved ALT bindings. */
-function solanaWire(text){const bytes=decodeBase58(text);let at=0,n=0,shift=0,b;do{if(at>=3||at>=bytes.length)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');b=bytes[at++];n|=(b&127)<<shift;shift+=7;}while(b&128);if(n!==1||at!==1||bytes.length<=at+64)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');const message=bytes.subarray(at+64);let offset=message[0]&128?1:0;if(offset&&message[0]!==128||message[offset]!==1)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');offset+=3;let count=0,bits=0;do{if(offset>=message.length||bits>14)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');b=message[offset++];count|=(b&127)<<bits;bits+=7;}while(b&128);if(count<1||count>256||offset+count*32+32>message.length)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');return{signature:encodeBase58(bytes.subarray(at,at+64)),message,feePayer:encodeBase58(message.subarray(offset,offset+32)),blockhash:encodeBase58(message.subarray(offset+count*32,offset+count*32+32))};}
+function guardedTokenDebit(plan,identity,accounts,meta,failed){
+ const index=accounts.indexOf(identity?.tokenAccount);
+ if(identity?.kind!=='TOKEN'||identity.address!==plan.source.address||identity.decimals!==plan.source.decimals||index<0||![TOKEN_PROGRAM,'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'].includes(identity.tokenProgram))fail('EXECUTION_RECEIPT_BINDING_MISMATCH');
+ const balance=rows=>{
+  if(!Array.isArray(rows)||rows.length>64)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');
+  const matches=rows.filter(row=>row.accountIndex===index),row=matches[0];
+  if(matches.length!==1||row.owner!==plan.sender||row.mint!==plan.source.address||row.programId!==identity.tokenProgram||row.uiTokenAmount?.decimals!==plan.source.decimals)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');
+  const value=amount(row.uiTokenAmount.amount);if(value>=(1n<<64n))fail('EXECUTION_EVIDENCE_INVALID');return value;
+ };
+ if(balance(meta.preTokenBalances)-balance(meta.postTokenBalances)!==(failed?0n:amount(plan.amountRaw)))fail('EXECUTION_RECEIPT_BINDING_MISMATCH');
+}
 export function createRelayProviderReceiptVerifier({fetch:wire=globalThis.fetch,now=Date.now,chains,apiKey}={}){
  if(typeof wire!=='function'||typeof now!=='function'||!Array.isArray(chains)||!chains.length||chains.length>128||apiKey!==undefined&&(typeof apiKey!=='string'||apiKey.length>256||/[\r\n]/.test(apiKey)))fail('INVALID_EXECUTION_CONFIG');
  const profiles=new Map();for(const rawChain of chains){const chain=structuredClone(rawChain);let url;try{url=new URL(chain.rpcUrl);}catch{fail('INVALID_EXECUTION_CONFIG');}
@@ -53,8 +63,10 @@ export function createRelayProviderReceiptVerifier({fetch:wire=globalThis.fetch,
   return{tx,block,final:finalized,failed:tx.meta.err!==null,confirmations:1,proof:{chainId:chain.chainId,transactionHash:txHash,blockNumberRaw:String(tx.slot),blockHash:block.blockhash,observedAtMs:now(),confirmations:1}};
  }
  async function solanaSource(plan,action,txHash,chain,signal){const s=await solanaSnapshot(chain,txHash,signal,'base64'),encoded=s.tx.transaction,t=action.payload.transaction;
-  if(!Array.isArray(encoded)||encoded[1]!=='base64'||typeof encoded[0]!=='string'||!t||t.feePayer!==plan.sender)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');const bytes=Buffer.from(encoded[0],'base64');if(bytes.toString('base64')!==encoded[0])fail('EXECUTION_RECEIPT_BINDING_MISMATCH');const actual=solanaWire(encodeBase58(bytes)),expected=solanaWire(t.serialized);if(actual.signature!==txHash||actual.feePayer!==plan.sender||expected.feePayer!==plan.sender||expected.blockhash!==t.blockhash||!Buffer.from(actual.message).equals(Buffer.from(expected.message)))fail('EXECUTION_RECEIPT_BINDING_MISMATCH');
-  const networkFee=BigInt(integer(s.tx.meta.fee)),fee=BigInt(integer(s.tx.meta.preBalances?.[0]))-BigInt(integer(s.tx.meta.postBalances?.[0]))-amount(action.payload.spending.nativeValueRaw);if(fee<networkFee||fee>amount(action.payload.spending.nativeFeeCapRaw))fail('EXECUTION_ACTUAL_FEE_EXCEEDED');s.proof.actualNativeFeeRaw=fee.toString();return s;
+  if(!Array.isArray(encoded)||encoded[1]!=='base64'||typeof encoded[0]!=='string'||!t||t.feePayer!==plan.sender)fail('EXECUTION_RECEIPT_BINDING_MISMATCH');const bytes=Buffer.from(encoded[0],'base64');if(bytes.toString('base64')!==encoded[0])fail('EXECUTION_RECEIPT_BINDING_MISMATCH');
+  const binding=verifySolanaReceiptBinding({transaction:t,actualBytes:bytes,signature:txHash,sender:plan.sender,meta:s.tx.meta,sourceIdentity:action.payload.validation?.sourceIdentity});
+  if(binding.binding==='LIGHTHOUSE_GUARDS'&&plan.source.address!==SYSTEM_PROGRAM)guardedTokenDebit(plan,action.payload.validation?.sourceIdentity,binding.accounts,s.tx.meta,s.failed);
+  const networkFee=BigInt(integer(s.tx.meta.fee)),fee=BigInt(integer(s.tx.meta.preBalances?.[0]))-BigInt(integer(s.tx.meta.postBalances?.[0]))-(s.failed?0n:amount(action.payload.spending.nativeValueRaw));if(fee<networkFee||fee>amount(action.payload.spending.nativeFeeCapRaw))fail('EXECUTION_ACTUAL_FEE_EXCEEDED');s.proof.actualNativeFeeRaw=fee.toString();return s;
  }
  async function destinationProof(plan,chain,txHash,sourceHash,route,signal){let s,net;
   if(chain.vm==='EVM'){s=await evmSnapshot(chain,txHash,signal);if(s.receipt.status!=='0x1')return null;

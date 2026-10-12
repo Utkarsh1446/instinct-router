@@ -41,3 +41,32 @@ test('irrelevant sub-floor destination hints do not hide a later full payout or 
  if(q.method==='eth_getBlockByNumber'&&q.params[0]!=='latest'&&activeFirst)body.result.transactions=[first];return new Response(JSON.stringify(body));};
  const verifier=createRelayProviderReceiptVerifier({fetch:wire,now:()=>now,chains:profiles});assert.equal((await verifier.confirm(f.plan,f.action,sourceHash)).destinationCredit.amountRaw,'1000');f.state.destReceipt.logs[0].data='0x'+word(500);await assert.rejects(verifier.confirm(f.plan,f.action,sourceHash),e=>e.code==='DESTINATION_CREDIT_REQUIRED');
 });
+
+function guardedSolanaSourceFixture(isToken=true){
+ const f=fixture(),chainId='solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',payer=pub(32,20),blockhash=pub(32,21),tokenAccount=pub(32,22),mint=pub(32,23),lighthouse='L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95';
+ const payerKey={pubkey:payer,isSigner:true,isWritable:true},sourceKey={pubkey:tokenAccount,isSigner:false,isWritable:true};
+ const trade={programId:isToken?TOKEN_PROGRAM:SYSTEM_PROGRAM,keys:[payerKey,sourceKey],data:new Uint8Array(12)},guard=(key,data)=>({programId:lighthouse,keys:[key],data:Buffer.from(data,'hex')});
+ const nativeGuard=guard(payerKey,'06040300b032df00000000000403000001000000000000000000'),tokenGuard=guard(sourceKey,'0a04030300000600000000000000000508');
+ const unsigned=serializeUnsignedTransaction(encodeLegacyMessage({feePayer:payer,blockhash,instructions:[trade]})),signed=serializeUnsignedTransaction(encodeLegacyMessage({feePayer:payer,blockhash,instructions:[trade,nativeGuard,...(isToken?[tokenGuard]:[])]}));signed.fill(24,1,65);const submitted=encodeBase58(signed.subarray(1,65));
+ const source={chainId,address:isToken?mint:SYSTEM_PROGRAM,decimals:isToken?6:9};Object.assign(f.plan,{source,sender:payer,nativeCosts:[{chainId,amountRaw:'7000'}]});Object.assign(f.plan.providerRoute,{sourceVm:'SOLANA',sourceConfirmations:1});f.action.chainId=chainId;
+ Object.assign(f.action.payload,{vm:'SOLANA',transaction:{serialized:encodeBase58(unsigned),feePayer:payer,blockhash,lastValidBlockHeight:200},spending:{asset:source,amountRaw:'1000',nativeValueRaw:isToken?'0':'1000',nativeFeeCapRaw:'7000'},validation:{sourceIdentity:isToken?{kind:'TOKEN',address:mint,decimals:6,tokenAccount,tokenProgram:TOKEN_PROGRAM}:{kind:'NATIVE',address:SYSTEM_PROGRAM,decimals:9}}});
+ Object.assign(f.state.status,{originChainId:792703809,inTxHashes:[submitted]});
+ const row=amount=>({accountIndex:1,mint,owner:payer,programId:TOKEN_PROGRAM,uiTokenAmount:{amount,decimals:6}});
+ const meta={err:null,fee:5000,preBalances:[100000],postBalances:[isToken?94500:93500],loadedAddresses:{writable:[],readonly:[]},innerInstructions:[],preTokenBalances:isToken?[row('2000')]:[],postTokenBalances:isToken?[row('1000')]:[]};
+ const chain={chainId,providerChainId:792703809,vm:'SOLANA',rpcUrl:profiles[0].rpcUrl,confirmations:1,nativeCurrency:{address:SYSTEM_PROGRAM,decimals:9,symbol:'SOL'}};
+ const wire=async(url,init)=>{if(url!==chain.rpcUrl)return f.wire(url,init);const q=JSON.parse(init.body);let result;switch(q.method){case'getGenesisHash':result='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';break;case'getTransaction':result={slot:100,transaction:[Buffer.from(signed).toString('base64'),'base64'],meta};break;case'getSignatureStatuses':result={value:[{slot:100,err:meta.err,confirmationStatus:'finalized',confirmations:null}]};break;case'getBlock':result={blockhash,signatures:[submitted]};break;default:throw Error(q.method);}return new Response(JSON.stringify({jsonrpc:'2.0',id:q.id,result}));};
+ const verifier=createRelayProviderReceiptVerifier({fetch:wire,now:()=>now,chains:[chain,profiles[1]]});return{...f,meta,submitted,verifier,confirm:()=>verifier.confirm(f.plan,f.action,submitted)};
+}
+test('guarded native and SPL sources retain canonical EVM payout and account for rent and fee',async()=>{
+ for(const isToken of [false,true]){const f=guardedSolanaSourceFixture(isToken),result=await f.confirm();assert.equal(result.success,true);assert.equal(result.receipt.actualNativeFeeRaw,'5500');assert.equal(result.destinationCredit.amountRaw,'1000');assert.equal(result.destinationReceipt.commitment,'canonical');}
+});
+test('guarded SPL sources reject missing, duplicate, malformed and mismatched pinned token evidence',async()=>{
+ const mutations=[f=>delete f.meta.preTokenBalances,f=>f.meta.postTokenBalances=[],f=>f.meta.postTokenBalances.push(structuredClone(f.meta.postTokenBalances[0])),f=>f.meta.postTokenBalances[0].owner=pub(32,25),f=>f.meta.preTokenBalances[0].mint=pub(32,25),f=>f.meta.postTokenBalances[0].accountIndex=2,f=>f.meta.postTokenBalances[0].programId=SYSTEM_PROGRAM,f=>f.meta.postTokenBalances[0].uiTokenAmount.decimals=9,f=>f.meta.postTokenBalances[0].uiTokenAmount.amount='1001',f=>f.meta.postTokenBalances[0].uiTokenAmount.amount='999',f=>f.meta.postTokenBalances[0].uiTokenAmount.amount='invalid',f=>f.meta.postTokenBalances[0].uiTokenAmount.amount=(1n<<64n).toString(),f=>f.action.payload.validation.sourceIdentity.tokenAccount=pub(32,25)];
+ for(const mutate of mutations){const f=guardedSolanaSourceFixture();mutate(f);await assert.rejects(f.confirm());}
+});
+test('guarded sources reject guard CPI and missing CPI evidence, and enforce actual fee caps',async()=>{
+ for(const isToken of [false,true])for(const mode of ['cpi','missing','fee']){const f=guardedSolanaSourceFixture(isToken);if(mode==='cpi')f.meta.innerInstructions=[{index:1,instructions:[{programIdIndex:0,accounts:[],data:''}]}];if(mode==='missing')delete f.meta.innerInstructions;if(mode==='fee')f.meta.postBalances[0]=90000;await assert.rejects(f.confirm(),e=>e.code===(mode==='fee'?'EXECUTION_ACTUAL_FEE_EXCEEDED':'EXECUTION_RECEIPT_BINDING_MISMATCH'));}
+});
+test('finalized failed guarded sources prove failure with unchanged tokens and network fee only',async()=>{
+ for(const isToken of [false,true]){const f=guardedSolanaSourceFixture(isToken);f.meta.err={InstructionError:[1,{Custom:1}]};f.meta.postBalances[0]=95000;if(isToken)f.meta.postTokenBalances[0].uiTokenAmount.amount='2000';const result=await f.confirm();assert.equal(result.success,false);assert.equal(result.confirmedFailure,true);assert.equal(result.receipt.actualNativeFeeRaw,'5000');assert.equal(result.destinationCredit,undefined);assert.equal(result.destinationReceipt,undefined);if(isToken){f.meta.postTokenBalances[0].uiTokenAmount.amount='1000';await assert.rejects(f.confirm(),e=>e.code==='EXECUTION_RECEIPT_BINDING_MISMATCH');}}
+});

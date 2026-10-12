@@ -870,8 +870,6 @@ export function createRelayBaseSolExecution({
           !eq(r.transactionHash, expected) ||
           !eq(tx.hash, expected) ||
           !hash(r.blockHash) ||
-          !eq(tx.blockHash, r.blockHash) ||
-          tx.blockNumber !== r.blockNumber ||
           !eq(tx.from, plan.sender) ||
           !eq(tx.to, t.tx.to) ||
           tx.input !== t.tx.data ||
@@ -887,6 +885,13 @@ export function createRelayBaseSolExecution({
           p.quantity(tx.maxFeePerGas) > t.maxFee ||
           p.quantity(tx.maxPriorityFeePerGas) > t.priority
         )
+          fail("EXECUTION_RECEIPT_BINDING_MISMATCH");
+        // Receipt and transaction lookups can hit different RPC replicas. A
+        // matching transaction still in the pending pool is not a bad binding.
+        // Validate its immutable contents above before waiting for mined data.
+        if (tx.blockHash === null && tx.blockNumber === null && tx.transactionIndex === null)
+          throw new ExecutionEngineError("RECEIPT_PENDING", 202);
+        if (!eq(tx.blockHash, r.blockHash) || tx.blockNumber !== r.blockNumber)
           fail("EXECUTION_RECEIPT_BINDING_MISMATCH");
         const height = p.quantity(r.blockNumber),
           confirmations = p.quantity(head) - height + 1n;

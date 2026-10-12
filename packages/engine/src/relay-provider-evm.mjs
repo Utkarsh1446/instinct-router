@@ -57,12 +57,16 @@ export async function prepareEvm({request,terms,chain,read,signal,now}){
  for(const action of actions){
   const canSimulate=action.kind==='TOKEN_APPROVAL'||!needsApproval;
   let estimate;
-  if(canSimulate){const [simulation,gas]=await together([read('eth_call',[action.transaction,block],signal),read('eth_estimateGas',[action.transaction,block],signal)]);
-   if(typeof simulation!=='string'||!/^0x(?:[0-9a-fA-F]{2})*$/.test(simulation)||action.kind==='TOKEN_APPROVAL'&&!['0x','0x'+word(1)].includes(simulation))fail('RELAY_PROVIDER_SIMULATION_FAILED');estimate=quantity(gas);
-  }else estimate=amount(terms.funding.data.gas??terms.funding.data.gasLimit??'0');
+  if(canSimulate)estimate=quantity(await read('eth_estimateGas',[action.transaction,block],signal));
+  else estimate=amount(terms.funding.data.gas??terms.funding.data.gasLimit??'0');
   if(estimate<21000n||ceil(estimate*3n,2n)>MAX_GAS)fail('RELAY_PROVIDER_GAS_UNKNOWN');
   action.transaction.gas=hex(ceil(estimate*3n,2n));
-  action.estimateRaw=(await reserve(chain,read,action.transaction,block,signal)).toString();
+  // Simulate the exact bounded gas limit offered to the wallet. An omitted
+  // limit lets nodes charge the entire block gas limit against the balance.
+  const [fee,simulation]=await together([reserve(chain,read,action.transaction,block,signal),
+   ...(canSimulate?[read('eth_call',[action.transaction,block],signal)]:[])]);
+  if(canSimulate&&(typeof simulation!=='string'||!/^0x(?:[0-9a-fA-F]{2})*$/.test(simulation)||action.kind==='TOKEN_APPROVAL'&&!['0x','0x'+word(1)].includes(simulation)))fail('RELAY_PROVIDER_SIMULATION_FAILED');
+  action.estimateRaw=fee.toString();
   action.validation={targetIdentity:action.kind==='TOKEN_APPROVAL'?sourceIdentity:targetIdentity,...(sourceIdentity?{sourceIdentity,spender,spenderIdentity}:{}),simulationVerified:canSimulate,feeModel:chain.feeModel};
  }
  // Provider full-route gas is an explicit API estimate, not independent surcharge attestation.

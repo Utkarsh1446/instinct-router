@@ -29,7 +29,7 @@ export function createAssetPicker({config,document,client,onSelect}) {
   function choose(asset, custom=false) {if(!opened)return;onSelect(side,asset,custom);close();}
   function row(asset, custom=false) {
     const button=make('button','asset-token-row');button.type='button';
-    const icon=make('span','asset-token-icon',(asset.symbol ?? 'T').slice(0,2).toUpperCase());icon.setAttribute('aria-hidden','true');
+    const icon=make('span','asset-token-icon',(asset.symbol ?? 'T').slice(0,2).toUpperCase());icon.setAttribute('aria-hidden','true');icon.setAttribute('data-symbol',asset.symbol ?? '');
     const details=make('span','asset-token-details'), symbol=make('strong','',asset.symbol ?? 'Token'), name=make('span','asset-token-name',asset.name ?? asset.symbol ?? (custom?'Custom token':'Token'));
     const network=make('span','asset-network-badge',chainName(asset.chainId));
     const contract=make('span','asset-token-address',asset.address);

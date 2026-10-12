@@ -5,27 +5,30 @@
 <title>Instinct Router · Swap</title>
 <link rel="stylesheet" href="/asset-picker.css">
 <style>
-  :root{color-scheme:dark;font:15px system-ui,sans-serif;background:#111215;color:#ededee}
-  *{box-sizing:border-box}body{margin:0;padding:36px 16px}main{max-width:480px;margin:auto}
-  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}h1{font-size:22px;margin:0}h2{font-size:18px;margin:0 0 16px}
-  .badge{font-size:11px;border:1px solid #45474d;border-radius:30px;padding:6px 10px;color:#c6c9cf}
-  .panel{background:#1b1d22;border:1px solid #33363e;border-radius:24px;padding:20px}.token-box{background:#24272e;border-radius:16px;padding:16px;margin:8px 0}.token-box .field{margin:0 0 10px}
-  p{line-height:1.5;color:#aeb4c0}.field{display:block;margin:14px 0}label{font-size:12px;color:#bec4d0}
-  input,select{width:100%;padding:11px;border:1px solid #41454f;border-radius:10px;background:#14161b;color:#f3f3f4;margin-top:6px;font:inherit;min-width:0}
-  #amount{font-size:30px;background:transparent;padding:4px 0;border:0;margin-top:8px;outline-offset:4px}#amount::placeholder{color:#777e8b}.direction{text-align:center;color:#b1b8c5;font-size:23px;margin:-5px 0}
-  button{font:inherit;border:0;border-radius:14px;background:#d8ff69;color:#182105;font-weight:650;padding:15px;width:100%;cursor:pointer;margin-top:10px}button:disabled{opacity:.45;cursor:not-allowed}
-  .secondary{background:#333844;color:#e4e8f0}.text-button{width:auto;background:transparent;color:#d8ff69;padding:4px 0;font-size:12px;margin-top:4px}.muted{font-size:12px;color:#a7adba;overflow-wrap:anywhere}
-  .wallet-row{display:flex;gap:8px;align-items:center}.wallet-row select{flex:1}.wallet-row .text-button{flex:none}.wallet-row select:empty{display:none}
-  .widget-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.widget-heading h2{margin:0}.widget-heading select{max-width:170px;font-size:12px;margin:0;padding:8px}.widget-heading select:empty{display:none}
-  #source-wallet-status{margin:7px 0 15px}#destination-wallet-status{margin:5px 0}#swap-next-step{margin:12px 0 0}#wallet-status{margin:10px 0 0}#wallet-status[data-error=true],#status[data-error=true]{color:#ffc1b6}
-  #execution-review p{margin:5px 0}#review-input-warning{color:#ffcf8d}
-  details{margin:14px 0;color:#aeb4c0}summary{cursor:pointer;font-size:12px}.custom[hidden],[hidden]{display:none!important}
-  #price-panel{margin:24px 0;padding:0 4px}.route{border:1px solid #404650;border-radius:14px;padding:14px;margin:12px 0}.chosen{border-color:#bad86a}.route strong{display:block;margin-bottom:8px}.route p{margin:4px 0;font-size:12px}
-  #status{font-size:12px;line-height:1.5;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;color:#adb6c8;max-height:280px;overflow:auto}.empty{color:#7f8796;font-size:13px}
+  :root{color-scheme:light;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f5f4;color:#202321;font-synthesis:none}
+  *{box-sizing:border-box}body{margin:0;min-height:100dvh;-webkit-font-smoothing:antialiased}button,input,select{font:inherit}button,input,select,summary{-webkit-tap-highlight-color:transparent}
+  button{border:0;cursor:pointer}button:disabled{cursor:not-allowed;opacity:.42}button:focus-visible,summary:focus-visible{outline:2px solid #626f65;outline-offset:4px}button{transition:background .16s,transform .16s,box-shadow .16s}button:active:not(:disabled){transform:scale(.98)}[hidden],.custom[hidden]{display:none!important}
+  .site-header{max-width:1160px;margin:auto;padding:20px 36px;display:flex;justify-content:space-between;align-items:center;gap:20px}.brand{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:650;letter-spacing:-.5px}.brand-mark{width:30px;height:30px;display:grid;place-items:center;background:#222623;color:white;border-radius:10px}.brand-mark svg{width:19px;height:19px}.header-note{font-size:12px;color:#888d88}.header-note::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:#8ca88d;margin-right:7px}
+  main{max-width:420px;margin:24px auto 48px;padding:0 12px}.page-intro{text-align:center;margin-bottom:24px}.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#949a94;margin:0 0 10px}.page-intro h1{font-size:30px;font-weight:500;letter-spacing:-1.3px;margin:0}.page-intro p:last-child{font-size:13px;color:#7d8876;margin:10px 0 0}
+  .panel{padding:0;border:0;background:transparent}.widget-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 5px;margin-bottom:14px}.widget-heading h2{font-size:13px;font-weight:550;margin:0}.widget-heading select{width:auto;max-width:165px;padding:6px 9px;margin:0;font-size:11px;border-color:#e0e3df;background:transparent;border-radius:20px}.widget-heading select:empty{display:none}
+  .token-box{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto 1fr auto;column-gap:12px;min-height:136px;padding:18px 22px 16px;margin:0;background:#fff;border:1px solid #ffffff;border-radius:28px;box-shadow:0 5px 12px #26362602}.token-heading{display:contents}.token-heading>span{grid-column:1/-1;color:#737b70;font-size:12px;margin-bottom:10px}.token-picker-button{grid-column:2;grid-row:2;align-self:center}.amount-field{grid-column:1;grid-row:2;align-self:center;display:block;min-width:0}.amount-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.receive-amount{grid-column:1;grid-row:2;align-self:center;min-width:0;font-size:32px;font-weight:450;letter-spacing:-1.3px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8b9485;font-variant-numeric:tabular-nums}.receive-amount[data-state=quoted]{color:#242824}.receive-amount:focus-visible{outline:2px solid #909d91;outline-offset:3px;border-radius:5px}
+  #amount{font-size:32px;font-weight:450;letter-spacing:-1.3px;line-height:1.4;font-variant-numeric:tabular-nums;background:transparent;padding:0;border:0;margin:0;border-radius:5px;width:100%;min-width:0;color:#242824}#amount:focus{outline:0}#amount:focus-visible{outline:2px solid #909d91;outline-offset:4px}#amount::placeholder{color:#8b9485;opacity:1}.asset-balance{grid-column:1/-1;grid-row:3;text-align:left;font-size:10px;color:#76816f;margin:7px 0 0;min-height:15px;line-height:1.5;overflow-wrap:anywhere}.asset-balance[data-state=empty]{color:#788371}
+  .custom{grid-column:1/-1;grid-row:4;min-width:0;border-top:1px solid #eef0ed;margin-top:15px;padding-top:3px}.direction{height:8px;position:relative;display:flex;align-items:center;justify-content:center;z-index:1}.direction button{display:grid;place-items:center;width:36px;height:36px;padding:0;border:4px solid #f4f5f4;border-radius:50%;background:#e9ece8;color:#606760;margin:0;box-shadow:0 1px 0 #fff8}.direction button:hover{background:#dfe4dd}.direction svg{width:16px;height:16px;transition:transform .2s}.direction button:hover svg{transform:rotate(180deg)}
+  label{font-size:11px;color:#6f7b65}.field{display:block;margin:15px 0}input,select{width:100%;padding:11px 12px;border:1px solid #e1e5df;border-radius:12px;background:#fcfdfb;color:#343b33;margin-top:7px;min-width:0}input:focus-visible,select:focus-visible{outline:2px solid #8b9b89;outline-offset:2px}input::placeholder{color:#a5aca2}.recipient-section{margin:22px 4px 0}.recipient-section>.field{margin:0 0 10px}.recipient-section input{font-size:11px;padding:12px;background:#f8f9f7;border-color:#e2e6df;border-radius:14px}.wallet-row{display:flex;gap:10px;align-items:center}.wallet-row select{flex:1;font-size:11px;width:auto;max-width:170px;background:transparent;border:0;padding:5px 0;margin:0}.wallet-row select:empty{display:none}.text-button{width:auto;padding:4px 0;background:transparent;color:#5b6b56;font-size:11px;font-weight:550;margin:4px 0}.wallet-row .text-button{margin-left:auto;flex:none}.text-button:hover{color:#202b1c}.muted{font-size:11px;color:#8c9588;overflow-wrap:anywhere;line-height:1.6}#source-wallet-status{margin:0 5px 12px;font-size:10px}#source-wallet-status:empty,#destination-wallet-status:empty{display:none}#destination-wallet-status{margin:3px 0;font-size:10px}#destination-use-source{font-size:10px;margin-top:7px}
+  details{margin:17px 5px;color:#818a7c}summary{cursor:pointer;font-size:11px;width:max-content;max-width:100%;padding:4px 0}details[open]{padding-bottom:3px}details .field{margin:13px 0}details input,details select{background:#fff;font-size:12px}#swap-next-step{margin:12px 5px 0}#swap-next-step:empty{display:none}#wallet-status{margin:12px 5px 0}#wallet-status[data-error=true],#status[data-error=true]{color:#b34b3a}#review-input-warning{color:#a36b2a}
+  #swap-primary{display:block;width:100%;background:#232823;color:white;font-size:13px;font-weight:550;border-radius:18px;padding:17px 16px;min-height:51px;margin:17px 0 0;box-shadow:0 3px 8px #1d2b1c08}#swap-primary:hover:not(:disabled){background:#384237;box-shadow:0 4px 12px #1d2b1c12}#swap-primary:disabled{opacity:1;color:#9ba199;background:#e6e9e3;box-shadow:none}.secondary{background:#e7ece3;color:#4c5c45;padding:12px;border-radius:14px}.panel>button:not(#swap-primary):not(.text-button){padding:12px;border-radius:14px;background:#e3e9de;color:#44503e}
+  .widget-footer{text-align:center;font-size:10px;color:#7b8970;line-height:1.6;margin:18px 0 0}.widget-footer svg{width:11px;height:11px;vertical-align:-1px;margin-right:3px}#settlement-stop{display:block;margin:12px auto 0}
+  #price-panel{margin:26px 3px;padding:0}#price-panel>h2{font-size:12px;font-weight:550;color:#717b6a;margin:0 0 10px}.route{border:1px solid #e2e7de;border-radius:18px;background:#ffffff80;padding:15px;margin:9px 0}.chosen{border-color:#b7c7ad;background:#fff}.route strong{display:block;font-size:12px;font-weight:600;margin-bottom:8px;color:#46543e}.route p{margin:4px 0;font-size:11px;color:#909b87;line-height:1.5}.empty{font-size:12px;color:#8f9888}#status{font-size:11px;line-height:1.6;color:#8a9581;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;color:#7d8b74;max-height:280px;overflow:auto}
+  @media(min-height:900px) and (min-width:600px){main{margin-top:65px}}@media(max-width:600px){.site-header{padding:22px 22px}.header-note{font-size:10px}.brand{font-size:14px}main{margin:28px auto 40px;padding:0 20px;max-width:440px}.page-intro{margin-bottom:26px}.page-intro h1{font-size:28px}.page-intro p:last-child{font-size:12px}.token-box{padding:18px 20px;min-height:136px}.recipient-section{margin-top:20px}}
+  @media(max-width:360px){main{padding:0 14px}.header-note{display:none}.token-box{padding:18px;column-gap:8px}#amount,.receive-amount{font-size:28px}.recipient-section input{font-size:10px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 <link rel="stylesheet" href="/trade-progress.css">
+<header class="site-header">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14m-4-4 4 4-4 4M19 16H5m4-4-4 4 4 4"/></svg></span>Instinct Router</div>
+  <span class="header-note">Self-custodial swaps</span>
+</header>
 <main>
-  <header><h1>Instinct Router</h1><span class="badge">Standalone</span></header>
+  <div class="page-intro"><h1>Swap, simply.</h1><p>Your assets. Your wallet. Your next move.</p></div>
   <form class="panel" id="quote-form">
     <div class="widget-heading"><h2>Swap</h2><select id="source-wallet-provider" aria-label="Source wallet"></select></div>
     <button id="source-wallet-connect" type="button" hidden disabled>Connect wallet</button>
@@ -41,7 +44,7 @@
         </button>
       </div>
       <select id="source" aria-label="You pay token" required hidden></select>
-      <label>Amount<input id="amount" placeholder="0.00" inputmode="decimal" autocomplete="off" required></label>
+      <label class="amount-field"><span class="amount-label">Amount</span><input id="amount" placeholder="0.00" inputmode="decimal" autocomplete="off" required></label>
       <p id="source-balance" class="asset-balance" role="status" aria-live="polite">Connect a wallet to see balance</p>
       <div class="custom" id="source-custom" hidden>
         <label class="field">Source chain<select id="source-chain"></select></label>
@@ -50,7 +53,7 @@
         <p id="source-token-help" class="muted" role="status"></p>
       </div>
     </div>
-    <div class="direction" aria-hidden="true">↓</div>
+    <div class="direction"><button id="swap-direction" type="button" aria-label="Reverse swap direction" title="Reverse swap direction"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4v12m-4-4 4 4 4-4"/></svg></button></div>
     <div class="token-box">
       <div class="token-heading"><span id="destination-token-label">You receive</span>
         <button id="destination-token-picker" class="token-picker-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Select receiving token">
@@ -60,6 +63,7 @@
         </button>
       </div>
       <select id="destination" aria-label="You receive token" required hidden></select>
+      <output id="receive-amount" class="receive-amount" aria-label="Estimated receiving amount" aria-live="polite" data-state="empty">0.00</output>
       <p id="destination-balance" class="asset-balance" role="status" aria-live="polite">Connect a wallet to see balance</p>
       <div class="custom" id="destination-custom" hidden>
         <label class="field">Destination chain<select id="destination-chain"></select></label>
@@ -68,6 +72,7 @@
         <p id="destination-token-help" class="muted" role="status"></p>
       </div>
     </div>
+    <div class="recipient-section">
     <label class="field">Receive at<input id="recipient" placeholder="Destination wallet address" autocomplete="off" spellcheck="false" required></label>
     <div class="wallet-row">
       <select id="destination-wallet-provider" aria-label="Destination wallet provider"></select>
@@ -77,6 +82,7 @@
     <button id="destination-wallet-select-account" type="button" hidden>Use selected destination account</button>
     <button id="destination-use-source" type="button" class="text-button" disabled>Use source address</button>
     <p id="destination-wallet-status" class="muted" role="status"></p>
+    </div>
     <details>
       <summary>Settings</summary>
       <label class="field">Slippage limit (%)<input id="slippage" value="0.50" type="number" min="0" max="5" step="0.01" required></label>
@@ -101,6 +107,7 @@
     <button id="execution-cancel" type="button" disabled hidden>Cancel unclaimed review</button>
     <div id="exact-action" hidden><pre id="exact-action-data"></pre><button id="wallet-confirm" type="button">Confirm</button><button id="wallet-decline" type="button">Decline</button></div>
   </form>
+  <p class="widget-footer"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><rect x="3.5" y="7" width="9" height="7" rx="2"/><path d="M5.5 7V4.5a2.5 2.5 0 0 1 5 0V7"/></svg>Signed by you. Sent from your wallet.</p>
   <button id="settlement-stop" type="button" class="text-button" hidden>Stop status checks</button>
   <section id="price-panel" aria-live="polite" hidden>
     <h2>Routes</h2>

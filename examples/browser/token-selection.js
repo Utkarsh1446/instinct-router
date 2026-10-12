@@ -35,6 +35,7 @@ export function initTokenSelection({config, document, client}) {
       config.assets.find(asset=>asset.id===config.defaults?.[side+'AssetId']) ?? config.assets[side==='source'?0:1] ?? config.assets[0];
     $(side).value=preset?.id ?? 'custom';$(side+'-custom').hidden=!!preset;displaySelectedToken({side,config,document});
   }
+  $('swap-direction')?.addEventListener('click',()=>{if (!$('quote-form')?.inert) reverseTokenSelection({config,document});});
   return picker;
 }
 export function displaySelectedToken({side,config,document,asset}) {
@@ -45,6 +46,7 @@ export function displaySelectedToken({side,config,document,asset}) {
   const chain=config.chains.find(row=>row.chainId===chainId)?.name ?? chainId;
   const symbol=selected?.symbol ?? (address ? address.slice(0,5)+'…'+address.slice(-4) : 'Select token');
   $(side+'-token-symbol').textContent=symbol;$(side+'-token-name').textContent=selected?.name ?? (selected ? selected.symbol ?? '' : 'Custom token');
+  $(side+'-token-icon')?.setAttribute?.('data-symbol',selected?.symbol ?? '');
   $(side+'-token-chain').textContent=chain;$(side+'-token-icon').textContent=(selected?.symbol ?? 'T').slice(0,2).toUpperCase();
   $(side+'-token-picker')?.setAttribute?.('aria-label',`Select ${side==='source'?'payment':'receiving'} token. ${symbol} on ${chain}`);
 }
@@ -70,4 +72,23 @@ export async function selectedToken({side,config,client,document,signal}) {
     resolved.decimalsSource === 'PROVIDER_CATALOG' ? 'provider token catalog' : resolved.decimalsSource === 'PINNED_CONFIG' ? 'configured token metadata' : 'router token metadata';
   $(side+'-token-help').textContent=`Token decimals: ${resolved.decimals} from ${provenance}. Available prices depend on provider coverage.`;
   return {chainId,address:resolved.address,decimals:resolved.decimals};
+}
+
+/** Swap both asset selections atomically; wallet ownership is handled by the existing role manager. */
+export function reverseTokenSelection({config,document}) {
+  const $=id=>document.getElementById(id);
+  const fields=['','-chain','-address','-decimals'];
+  const snapshot=side=>({values:fields.map(field=>$(side+field).value),hidden:$(side+'-custom').hidden});
+  const source=snapshot('source'),destination=snapshot('destination');
+  for(const [side,saved] of [['source',destination],['destination',source]])
+    fields.forEach((field,index)=>{$(side+field).value=saved.values[index];});
+  $('amount').value='';
+  const emit=(node,type)=>node.dispatchEvent?.(new (document.defaultView?.Event ?? Event)(type,{bubbles:true}));
+  // Dispatch after both sides change so wallet/network listeners never see a partial reversal.
+  for(const side of ['source','destination'])emit($(side),'change');
+  for(const [side,saved] of [['source',destination],['destination',source]]) {
+    $(side+'-decimals').value=saved.values[3];$(side+'-custom').hidden=saved.hidden;
+    displaySelectedToken({side,config,document});
+  }
+  emit($('amount'),'input');
 }

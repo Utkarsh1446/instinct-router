@@ -22,7 +22,13 @@ function updateInspection() {
   $('inspect').hidden = true;
   $('inspect').disabled = !!active;
 }
+function receivingEstimate(route,decimals) {
+  const output=$('receive-amount');if (!output) return;
+  output.textContent=route ? formatUnits(route.expectedOutputRaw,decimals) : '0.00';
+  output.dataset.state=route ? 'quoted' : 'empty';output.title=route ? 'Estimated receive: '+output.textContent+'. Fresh terms are checked before signing.' : '';
+}
 function resetInspection() {
+  receivingEstimate();
   stopPreview(); $('readiness').hidden = true; $('readiness').replaceChildren(); updateInspection();
   $('routes').replaceChildren(); $('response').textContent = 'Waiting for an amount and wallet addresses.';
   $('timings').textContent = '';
@@ -53,6 +59,7 @@ function renderInspection(result) {
 }
 
 function render(result, rtt, firstRtt, firstEligibleRtt) {
+  receivingEstimate(result.candidates.find(route=>route.id===result.winner && route.eligible),result.request.destination.decimals);
   $('response').textContent = JSON.stringify(result, null, 2);
   $('timings').textContent = `First preview: ${firstRtt === null ? 'none' : Math.round(firstRtt) + ' ms'} · First price-eligible route: ${firstEligibleRtt === null ? 'none' : Math.round(firstEligibleRtt) + ' ms'} · Full response: ${Math.round(rtt)} ms. ${result.comparisonComplete ? 'All planned comparisons finished.' : 'Some routes could not be compared; see provider details.'} Trade completion times are unmeasured.`;
   $('routes').replaceChildren();
@@ -93,7 +100,7 @@ $('cancel').addEventListener('click', () => active?.abort());
 $('quote-form').addEventListener('submit', async event => {
   event.preventDefault();
   if ($('quote-form').inert) return;
-  stopPreview(); active = new AbortController();
+  stopPreview(); receivingEstimate(); active = new AbortController();
   const controller = active; $('submit').disabled = true; updateInspection();
   $('routes').replaceChildren(); $('readiness').hidden = true; $('response').textContent = 'Waiting for the completed quote…';
   $('timings').textContent = 'Waiting for the first validated route…';
@@ -105,7 +112,7 @@ $('quote-form').addEventListener('submit', async event => {
       { signal: controller.signal, onCandidate(route) {
         if (active !== controller || controller.signal.aborted) return;
         firstRtt ??= performance.now() - start;
-        if (route.eligible) firstEligibleRtt ??= performance.now() - start;
+        if (route.eligible && firstEligibleRtt === null) {firstEligibleRtt=performance.now()-start;receivingEstimate(route,destination.decimals);}
         $('routes').append(routeCard(route, destination.decimals, false, true));
         $('timings').textContent = `First preview: ${Math.round(firstRtt)} ms · Full comparison still running…`;
         status('Comparing routes…');
@@ -113,6 +120,7 @@ $('quote-form').addEventListener('submit', async event => {
     if (active === controller && !controller.signal.aborted) render(result, performance.now() - start, firstRtt, firstEligibleRtt);
   } catch (error) {
     if (active === controller) {
+      receivingEstimate();
       $('routes').replaceChildren(); $('response').textContent = 'No completed quote was accepted.';
       $('timings').textContent = 'Comparison did not complete. Request fresh routes.';
       status(`${error.code ?? 'REQUEST_FAILED'}: ${error.message}`, true);

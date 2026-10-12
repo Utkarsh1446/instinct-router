@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initTokenSelection,selectedToken} from '../examples/browser/token-selection.js';
+import {initTokenSelection,selectedToken,reverseTokenSelection} from '../examples/browser/token-selection.js';
 class Element {value='';textContent='';hidden=false;children=[];events=new Map();append(row){this.children.push(row);if(this.children.length===1)this.value=row.value;}replaceChildren(){this.children=[];this.value='';}addEventListener(name,fn){this.events.set(name,fn);}}
 const EVM='eip155:7777777',SOL='solana:mainnet',address='0x'+'a'.repeat(40);
 function fixture(){const nodes=new Map();const document={getElementById(id){if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement(){return new Element();}};
@@ -42,4 +42,21 @@ test('manual preview precision accepts uint8 decimals 255 and rejects 256 or fra
   const client={async resolveAsset(){throw Object.assign(Error('Unsupported'),{code:'TOKEN_METADATA_UNSUPPORTED'});}};
   f.$('source-decimals').value='255';assert.equal((await selectedToken({...f,side:'source',client})).decimals,255);
   for(const precision of ['256','1.5','-1']){f.$('source-decimals').value=precision;await assert.rejects(selectedToken({...f,side:'source',client}),/exact decimals/);}
+});
+
+test('reversing assets preserves custom precision, clears amount, and never copies wallet addresses',()=>{
+  const f=fixture();f.$('destination').value='custom';f.$('destination-chain').value=SOL;
+  f.$('destination-address').value='So11111111111111111111111111111111111111112';f.$('destination-decimals').value='9';f.$('destination-custom').hidden=false;
+  f.$('amount').value='2';f.$('sender').value='source-wallet';f.$('recipient').value='receiving-wallet';
+  const observed=[];
+  for(const side of ['source','destination'])f.$(side).dispatchEvent=event=>{
+    observed.push([f.$('source').value,f.$('destination').value]);
+    f.$(side).events.get(event.type)?.(event);
+  };
+  reverseTokenSelection(f);
+  assert.deepEqual(observed,[['custom','dynamic-preset'],['custom','dynamic-preset']]);
+  assert.equal(f.$('source-chain').value,SOL);assert.equal(f.$('source-decimals').value,'9');
+  assert.equal(f.$('source-address').value,'So11111111111111111111111111111111111111112');
+  assert.equal(f.$('destination-custom').hidden,true);assert.equal(f.$('source-custom').hidden,false);
+  assert.equal(f.$('amount').value,'');assert.equal(f.$('sender').value,'source-wallet');assert.equal(f.$('recipient').value,'receiving-wallet');
 });

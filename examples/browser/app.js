@@ -22,10 +22,10 @@ function updateInspection() {
   $('inspect').hidden = true;
   $('inspect').disabled = !!active;
 }
-function receivingEstimate(route,decimals) {
+function receivingEstimate(route,decimals,priceOnly=false) {
   const output=$('receive-amount');if (!output) return;
   output.textContent=route ? formatUnits(route.expectedOutputRaw,decimals) : '0.00';
-  output.dataset.state=route ? 'quoted' : 'empty';output.title=route ? 'Estimated receive: '+output.textContent+'. Fresh terms are checked before signing.' : '';
+  output.dataset.state=route ? priceOnly ? 'estimate' : 'quoted' : 'empty';output.title=route ? 'Estimated receive: '+output.textContent+(priceOnly ? '. Completion time unavailable.' : '.')+' Fresh terms are checked before signing.' : '';
 }
 function resetInspection() {
   receivingEstimate();
@@ -58,8 +58,19 @@ function renderInspection(result) {
   box.append(card); $('response').textContent = JSON.stringify(result, null, 2);
 }
 
+function priceOnlyPreview(result) {
+  return result.candidates.filter(route=>{
+    const reasons=result.excluded?.find(row=>row.id===route.id)?.reasons;
+    return !route.eligible && reasons?.length===1 && reasons[0]==='UNKNOWN_COMPLETION_TIME' &&
+      ['QUOTE_VALIDATED','EXECUTION_VALIDATED'].includes(route.validationTier) &&
+      Number.isSafeInteger(route.feeBps) && route.feeBps>=0 && Number.isSafeInteger(route.priceImpactBps) && route.priceImpactBps>=0 &&
+      Number.isSafeInteger(route.validUntilMs) && route.validUntilMs>Date.now() &&
+      /^(?:[1-9][0-9]*)$/.test(route.minimumOutputRaw) && /^(?:[1-9][0-9]*)$/.test(route.expectedOutputRaw);
+  }).sort((a,b)=>BigInt(a.minimumOutputRaw)>BigInt(b.minimumOutputRaw)?-1:BigInt(a.minimumOutputRaw)<BigInt(b.minimumOutputRaw)?1:a.id.localeCompare(b.id))[0];
+}
 function render(result, rtt, firstRtt, firstEligibleRtt) {
-  receivingEstimate(result.candidates.find(route=>route.id===result.winner && route.eligible),result.request.destination.decimals);
+  const selected=result.candidates.find(route=>route.id===result.winner && route.eligible),preview=selected?undefined:priceOnlyPreview(result);
+  receivingEstimate(selected??preview,result.request.destination.decimals,!!preview);
   $('response').textContent = JSON.stringify(result, null, 2);
   $('timings').textContent = `First preview: ${firstRtt === null ? 'none' : Math.round(firstRtt) + ' ms'} · First price-eligible route: ${firstEligibleRtt === null ? 'none' : Math.round(firstEligibleRtt) + ' ms'} · Full response: ${Math.round(rtt)} ms. ${result.comparisonComplete ? 'All planned comparisons finished.' : 'Some routes could not be compared; see provider details.'} Trade completion times are unmeasured.`;
   $('routes').replaceChildren();
@@ -67,7 +78,7 @@ function render(result, rtt, firstRtt, firstEligibleRtt) {
     $('routes').append(routeCard(route, result.request.destination.decimals, route.id === result.winner));
   }
   if (!result.candidates.length) { const node = document.createElement('p'); node.className = 'empty'; node.textContent = 'No routes found. Try a different amount or token.'; $('routes').append(node); }
-  status(result.candidates.length ? 'Final price is confirmed in your swap review.' : '');
+  status(preview ? 'Estimated receive shown. Completion time is unavailable, so this route is excluded from speed ranking. Fresh terms are checked in your swap review.' : result.candidates.length ? 'Final price is confirmed in your swap review.' : '');
 }
 function routeCard(route, decimals, selected = false, provisional = false) {
     const expired = Number.isSafeInteger(route.validUntilMs) && route.validUntilMs <= Date.now();

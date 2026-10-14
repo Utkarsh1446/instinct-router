@@ -87,3 +87,25 @@ test('a superseded stream cannot repaint the receiving estimate for changed asse
   f.$('quote-form').dispatchEvent(new Event('input'));onCandidate({...route,expectedOutputRaw:'2000000'});
   assert.equal(f.$('receive-amount').textContent,'0.00');
 });
+
+test('fresh validated timing-only routes show a receive estimate without becoming eligible',async()=>{
+ const preview={...route,eligible:false,estimatedCompletionMs:null,validationTier:'QUOTE_VALIDATED',validUntilMs:Date.now()+60000};
+ const f=await fixture(async()=>({...result([preview]),winner:null,excluded:[{id:'r',reasons:['UNKNOWN_COMPLETION_TIME']}]}));
+ await f.submit();assert.equal(f.$('receive-amount').textContent,'1');assert.equal(f.$('receive-amount').dataset.state,'estimate');
+ assert.match(f.$('receive-amount').title,/Completion time unavailable/);assert.match(f.$('status').textContent,/Estimated receive shown/);
+ assert.equal(preview.eligible,false);assert.equal(preview.estimatedCompletionMs,null);
+ f.$('quote-form').dispatchEvent(new Event('change'));assert.equal(f.$('receive-amount').dataset.state,'empty');
+});
+test('timing-only preview fallback rejects unknown costs, stale quotes and other exclusions',async()=>{
+ const preview={...route,eligible:false,estimatedCompletionMs:null,validationTier:'QUOTE_VALIDATED',validUntilMs:Date.now()+60000};
+ for(const [changes,reasons]of [[{feeBps:null},['UNKNOWN_COMPLETION_TIME']],[{validationTier:'UNVERIFIED'},['UNKNOWN_COMPLETION_TIME']],[{validUntilMs:Date.now()-1},['UNKNOWN_COMPLETION_TIME']],[{},['UNKNOWN_COSTS']],[{},['UNKNOWN_COMPLETION_TIME','UNKNOWN_COSTS']]]){
+  const f=await fixture(async()=>({...result([{...preview,...changes}]),winner:null,excluded:[{id:'r',reasons}]}));await f.submit();assert.equal(f.$('receive-amount').dataset.state,'empty');
+ }
+});
+test('receive preview fallback uses the best minimum output and never replaces an eligible winner',async()=>{
+ const preview={...route,id:'preview',eligible:false,estimatedCompletionMs:null,validationTier:'QUOTE_VALIDATED',validUntilMs:Date.now()+60000,expectedOutputRaw:'9000000',minimumOutputRaw:'8900000'};
+ const f=await fixture(async()=>({...result([preview,route]),excluded:[{id:'preview',reasons:['UNKNOWN_COMPLETION_TIME']}]}));await f.submit();assert.equal(f.$('receive-amount').textContent,'1');assert.equal(f.$('receive-amount').dataset.state,'quoted');
+ const lower={...preview,id:'lower',expectedOutputRaw:'10000000',minimumOutputRaw:'8800000'};
+ const estimate=await fixture(async()=>({...result([lower,preview]),winner:null,excluded:[{id:'preview',reasons:['UNKNOWN_COMPLETION_TIME']},{id:'lower',reasons:['UNKNOWN_COMPLETION_TIME']}]}));
+ await estimate.submit();assert.equal(estimate.$('receive-amount').textContent,'9');assert.equal(estimate.$('receive-amount').dataset.state,'estimate');
+});

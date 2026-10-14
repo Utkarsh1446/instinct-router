@@ -71,11 +71,19 @@ export function validateRecord(value, expected) {
   if (!(value.claimedActionId === null || ids.has(value.claimedActionId)) ||
     ['CLAIMED','SUBMITTED'].includes(value.status) && value.claimedActionId !== plan.actions[value.nextAction]?.id ||
     value.status === 'COMPLETE' && (value.nextAction !== plan.actions.length || value.claimedActionId !== null)) fail();
-  const submitted = new Set();
-  for (const row of value.submissions) {
-    if (!row || !ids.has(row.actionId) || submitted.has(row.actionId) || typeof row.hash !== 'string' || !transactionHash(plan.source.chainId, row.hash)) fail();
-    submitted.add(row.actionId);
+  const submitted = new Set(), hashes = new Set();
+  for (const [index, row] of value.submissions.entries()) {
+    if (!row || Object.keys(row).sort().join(',') !== 'actionId,hash' || row.actionId !== plan.actions[index].id || submitted.has(row.actionId) || typeof row.hash !== 'string' || !transactionHash(plan.source.chainId, row.hash)) fail();
+    const hash = plan.source.chainId.startsWith('eip155:') ? row.hash.toLowerCase() : row.hash;
+    if (hashes.has(hash)) fail();
+    submitted.add(row.actionId); hashes.add(hash);
   }
+  const current = plan.actions[value.nextAction]?.id, count = value.submissions.length;
+  if (['CLAIMED','SUBMITTED','FAILED'].includes(value.status) &&
+    (!current || value.claimedActionId !== current || count !== value.nextAction + (value.status === 'CLAIMED' ? 0 : 1))) fail();
+  if (value.status === 'RECOVERY_REQUIRED' && (!current || !(value.claimedActionId === null && count === value.nextAction ||
+    value.claimedActionId === current && [value.nextAction,value.nextAction+1].includes(count)))) fail();
+  if (['CANCELLED','EXPIRED'].includes(value.status) && !count && (value.nextAction !== 0 || value.claimedActionId !== null)) fail();
   if (value.status === 'READY' && (value.claimedActionId !== null || value.nextAction >= plan.actions.length ||
     value.submissions.length !== value.nextAction || value.submissions.some((row,index) => row.actionId !== plan.actions[index].id))) fail();
   if (['CANCELLED','EXPIRED'].includes(value.status) && value.submissions.length) {
@@ -100,7 +108,7 @@ export function validateRecord(value, expected) {
   const crossChain = plan.source.chainId !== plan.destination.chainId;
   if (value.receipt !== undefined && value.receipt !== null) {
     const receipt = value.receipt;
-    if (receipt.chainId !== plan.source.chainId || !value.submissions.some(row => row.hash === receipt.transactionHash) ||
+    if (receipt.chainId !== plan.source.chainId || value.submissions.at(-1)?.hash !== receipt.transactionHash ||
       !raw(receipt.blockNumberRaw) || !(receipt.chainId.startsWith('eip155:') ? /^0x[0-9a-fA-F]{64}$/.test(receipt.blockHash) : base58Bytes(receipt.blockHash,32)) ||
       !Number.isSafeInteger(receipt.observedAtMs) || receipt.observedAtMs < 0 || receipt.observedAtMs > Date.now()+2000 ||
       !Number.isSafeInteger(receipt.confirmations) || receipt.confirmations < (value.status==='COMPLETE'&&providerRoute ? providerRoute.sourceConfirmations : 1) || receipt.chainId.startsWith('solana:') && receipt.confirmations !== 1 || receipt.actualNativeFeeRaw !== undefined && !raw(receipt.actualNativeFeeRaw)) fail();

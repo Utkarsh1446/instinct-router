@@ -18,7 +18,7 @@ The local example still works with `npm run example`: `/demo-config.json` return
 
 ## Vercel runtime setup
 
-Link a new Vercel project to this repository. Use the included `vercel.json`: Node 24, `npm ci --ignore-scripts`, `npm run build:vercel`, output `public`, and a 240-second Node function in `iad1`. Choose Redis in the same region when available. The function does not open a listening port or require a local application stack.
+Link the Vercel router project to the Instinct repository with Root Directory `router`. The router keeps its own npm lockfile and deployment, independently of the application. Use the included `vercel.json`: Node 24, `npm ci --ignore-scripts`, `npm run build:vercel`, output `public`, and a 240-second Node function in `iad1`. Choose Redis in the same region when available. The function does not open a listening port or require a local application stack.
 
 Configure these production environment variables:
 
@@ -27,6 +27,7 @@ Configure these production environment variables:
 | `ROUTER_PUBLIC_APP_KEY` | Fresh publishable app credential, at least 24 characters; also required for preview builds |
 | `ROUTER_SERVER_KEY` | Separate random server-only credential, at least 24 characters |
 | `ROUTER_PUBLIC_ORIGIN` | Exact production HTTPS origin, without a trailing slash |
+| `ROUTER_ALLOWED_ORIGINS_JSON` | Optional JSON array of at most 16 additional exact HTTPS frontend origins; no wildcards, paths, or credentials |
 | `ROUTER_REDIS_NAMESPACE` | Stable production identifier, 8–80 letters/digits/underscores/hyphens |
 | `UPSTASH_REDIS_REST_URL` | Dedicated Redis REST endpoint; `KV_REST_API_URL` is also accepted |
 | `UPSTASH_REDIS_REST_TOKEN` | Server-only write credential; `KV_REST_API_TOKEN` is also accepted |

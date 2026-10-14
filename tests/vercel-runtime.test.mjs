@@ -8,6 +8,18 @@ const environment = () => ({ VERCEL: '1', VERCEL_ENV: 'production', ROUTER_PUBLI
   UPSTASH_REDIS_REST_URL: 'https://redis.example.com', UPSTASH_REDIS_REST_TOKEN: 'server-only-test-token' });
 const request = (headers = {}, method = 'GET') => ({ method, headers: { ...headers }, rawHeaders: Object.entries(headers).flat() });
 
+test('integrators use a bounded explicit HTTPS origin allowlist, never wildcard or paths', () => {
+  const extra = ['https://instincts.market', 'https://www.instincts.market', 'https://router.example.com'];
+  const config = loadPublicRuntimeConfig({ ...environment(), ROUTER_ALLOWED_ORIGINS_JSON: JSON.stringify(extra) });
+  assert.deepEqual(config.allowedOrigins, ['https://router.example.com', 'https://router-release.vercel.app', ...extra.slice(0,2)]);
+  assert.deepEqual(config.apps[0].allowedOrigins, config.allowedOrigins);
+  for (const value of ['null', '{}', '"https://instincts.market"', '[null]', '[1]', '[]'.repeat(5000),
+    JSON.stringify(Array(17).fill('https://instincts.market')),
+    ...['http://instincts.market', 'https://instincts.market/', 'https://instincts.market/path', '*', 'https://*.vercel.app', 'https://user:pass@instincts.market'].map(url => JSON.stringify([url]))]) {
+    assert.throws(() => loadPublicRuntimeConfig({ ...environment(), ROUTER_ALLOWED_ORIGINS_JSON: value }));
+  }
+});
+
 test('public runtime requires explicit production credentials, HTTPS origin and durable namespace', () => {
   const config = loadPublicRuntimeConfig(environment());
   assert.deepEqual(config.allowedOrigins, ['https://router.example.com', 'https://router-release.vercel.app']);

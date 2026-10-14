@@ -1,6 +1,6 @@
 # Instinct Router
 
-A standalone swap widget, developer SDK, and wallet-authorized routing API. It supports same-chain and cross-chain routes across configured EVM networks and Solana, including assets entered by contract or mint address. It runs separately from the Instinct application.
+A separately deployed swap widget, developer SDK, and wallet-authorized routing API, maintained in the [Instinct repository](https://github.com/Utkarsh1446/Instinct/tree/main/router). It supports same-chain and cross-chain routes across configured EVM networks and Solana, including assets entered by contract or mint address. Instinct uses the same SDK to fund token and eligible stock purchases; the market purchase remains a separately reviewed operation.
 
 Users connect their own source and destination wallets. The backend compares routes, prepares fresh terms, validates transactions, and tracks settlement. Users sign and submit through their wallets; the service holds no wallet private keys.
 

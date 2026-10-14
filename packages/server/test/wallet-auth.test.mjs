@@ -54,6 +54,17 @@ test('challenge/session storage retains live bounded proofs and rejects exhausti
   assert.throws(() => auth.challenge(app, origin, { chainId: 'eip155:8453', address: account.address }), /capacity is full/);
 });
 
+test('valid JSON with a malformed durable wallet session fails closed', () => {
+  const row={scope:JSON.stringify([app.id,origin]),wallet:{chainId:'eip155:8453',address:account.address.toLowerCase()},expiresAtMs:Date.now()+60000};
+  let saved;
+  const auth=createWalletAuthentication({store:{putChallenge(){},consumeChallenge(){},putSession(){},getSession(){return saved;}}});
+  for(const mutate of [value=>{delete value.expiresAtMs;},value=>{value.expiresAtMs='tomorrow';},value=>{value.expiresAtMs=Infinity;},value=>{value.wallet.address='not-a-wallet';},value=>{value.wallet.chainId='eip155:0';},value=>{value.wallet.extra=true;}]) {
+    saved=structuredClone(row);mutate(saved);
+    assert.throws(()=>auth.authenticate(req('a'.repeat(43)),app,origin),{code:'WALLET_AUTH_UNAVAILABLE'});
+  }
+  saved=row;assert.equal(auth.authenticate(req('a'.repeat(43)),app,origin).address,row.wallet.address);
+});
+
 test('shared wallet proof store consumes atomically across instances, preserves scope and expires sessions', async () => {
   const { createRedisWalletAuthStore } = await import('../src/wallet-auth.mjs');
   let time = Date.now(); const rows = new Map(), commands = [];

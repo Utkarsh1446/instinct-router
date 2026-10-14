@@ -9,5 +9,5 @@
     "./server": { "types": "./src/server.d.ts", "default": "./src/server.js" }
   },
   "files": ["src"],
-  "scripts": { "test": "node --test test/*.test.js" }
+  "scripts": { "test": "node ../../scripts/build.mjs && node --import ../../scripts/workspace-loader.mjs --test test/*.test.js" }
 }

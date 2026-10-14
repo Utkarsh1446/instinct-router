@@ -16,3 +16,23 @@ test('automatic compute limit is measured and exact final transaction simulated 
 
 test('durable canonical key ordering and mutable mint supply do not invalidate unchanged Solana funding identity',async()=>{for(const classic of [false,true]){const f=fixture(!classic,false,classic);f.mint.writeBigUInt64LE(1000000n,36);const p=await prepareSolana({...f,chain,now,expiresAtMs:120000});const sorted=JSON.parse(JSON.stringify(p.sourceIdentity,Object.keys(p.sourceIdentity).sort()));assert.notEqual(JSON.stringify(sorted),JSON.stringify(p.sourceIdentity));const plan={...f.request,expiresAtMs:120000},action={payload:{transaction:p.transaction,spending:{nativeFeeCapRaw:p.feeCapRaw},validation:{sourceIdentity:sorted}}};f.mint.writeBigUInt64LE(1000001n,36);assert.deepEqual(await preflightSolana({plan,action,chain,read:f.read,now}),{ready:true});f.mint.writeUInt32LE(1,0);f.mint[4]=9;await assert.rejects(preflightSolana({plan,action,chain,read:f.read,now}),{code:'EXECUTION_TOKEN_IDENTITY_MISMATCH'});}});
 test('durable key ordering also preserves native source identity while bound identity changes remain rejected',async()=>{const f=fixture(),p=await prepareSolana({...f,chain,now,expiresAtMs:120000});const identity=Object.fromEntries(Object.entries(p.sourceIdentity).sort(([a],[b])=>a.localeCompare(b)));const plan={...f.request,expiresAtMs:120000},action={payload:{transaction:p.transaction,spending:{nativeFeeCapRaw:p.feeCapRaw},validation:{sourceIdentity:identity}}};assert.deepEqual(await preflightSolana({plan,action,chain,read:f.read,now}),{ready:true});identity.decimals=8;await assert.rejects(preflightSolana({plan,action,chain,read:f.read,now}),{code:'EXECUTION_TOKEN_IDENTITY_MISMATCH'});});
+
+test('bounded balance loss cannot conceal simulated wallet reassignment or durable nonce creation',async()=>{
+ for(const change of [a=>{a.owner=TOKEN_PROGRAM;},a=>{a.data=[Buffer.alloc(80).toString('base64'),'base64'];},a=>{a.executable=true;}]){
+  const f=fixture(),read=async(method,params,...rest)=>{const result=await f.read(method,params,...rest);if(method==='simulateTransaction')change(result.value.accounts[0]);return result;};
+  await assert.rejects(prepareSolana({...f,read,chain,now,expiresAtMs:120000}),e=>e.code==='EXECUTION_SPENDING_MISMATCH');
+ }
+});
+test('simulated source token account must retain the reviewed extension shape',async()=>{
+ for(const classic of [true,false]){
+  const f=fixture(!classic,false,classic),read=async(method,params,...rest)=>{const result=await f.read(method,params,...rest);if(method==='simulateTransaction'){const a=result.value.accounts[1],b=Buffer.alloc(170);Buffer.from(a.data[0],'base64').copy(b);b[165]=2;b.writeUInt16LE(8,166);a.data[0]=b.toString('base64');}return result;};
+  await assert.rejects(prepareSolana({...f,read,chain,now,expiresAtMs:120000}));
+ }
+});
+test('fresh Solana preflight rejects account control changes after an otherwise safe review',async()=>{
+ for(const token of [false,true]){
+  const f=fixture(token),p=await prepareSolana({...f,chain,now,expiresAtMs:120000}),plan={...f.request,expiresAtMs:120000},action={payload:{transaction:p.transaction,spending:{nativeFeeCapRaw:p.feeCapRaw},validation:{sourceIdentity:p.sourceIdentity}}};
+  const read=async(method,params,...rest)=>{const result=await f.read(method,params,...rest);if(method==='simulateTransaction')result.value.accounts[0].owner=TOKEN_PROGRAM;return result;};
+  await assert.rejects(preflightSolana({plan,action,chain,read,now}),{code:'EXECUTION_SPENDING_MISMATCH'});
+ }
+});

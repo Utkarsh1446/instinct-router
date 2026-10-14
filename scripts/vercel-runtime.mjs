@@ -20,7 +20,7 @@ function json(value, fallback) {
 }
 function origin(value) {
   const url = new URL(value);
-  if (url.protocol !== 'https:' || url.origin !== value || url.username || url.password) throw new Error('PUBLIC_ORIGIN_REQUIRED');
+  if (url.protocol !== 'https:' || url.origin !== value || url.username || url.password || url.hostname.includes('*')) throw new Error('PUBLIC_ORIGIN_REQUIRED');
   return value;
 }
 export function loadPublicRuntimeConfig(env = process.env) {
@@ -28,6 +28,13 @@ export function loadPublicRuntimeConfig(env = process.env) {
   if (env.VERCEL !== '1' || env.VERCEL_ENV !== 'production') throw new Error('PRODUCTION_RUNTIME_REQUIRED');
   const allowedOrigins = [origin(env.ROUTER_PUBLIC_ORIGIN)];
   if (env.VERCEL_URL) allowedOrigins.push(origin('https://' + env.VERCEL_URL));
+  if (env.ROUTER_ALLOWED_ORIGINS_JSON !== undefined) {
+    const raw = env.ROUTER_ALLOWED_ORIGINS_JSON;
+    if (typeof raw !== 'string' || raw.length > 8192) throw new Error('PUBLIC_ORIGINS_INVALID');
+    const additional = JSON.parse(raw);
+    if (!Array.isArray(additional) || additional.length > 16 || additional.some(value => typeof value !== 'string')) throw new Error('PUBLIC_ORIGINS_INVALID');
+    allowedOrigins.push(...additional.map(origin));
+  }
   const namespace = env.ROUTER_REDIS_NAMESPACE;
   if (typeof namespace !== 'string' || !/^[A-Za-z0-9_-]{8,80}$/.test(namespace)) throw new Error('DURABLE_NAMESPACE_REQUIRED');
   const publishableKey = credential(env.ROUTER_PUBLIC_APP_KEY), serverKey = credential(env.ROUTER_SERVER_KEY);

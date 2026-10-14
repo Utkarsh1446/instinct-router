@@ -144,3 +144,23 @@ test('short pricing-evidence freshness is independent of still-valid signing exp
   for (const expiry of [NaN, Infinity, 15001]) assert.equal(why(withPricing(expiry)), 'STALE_PRICING_EVIDENCE');
   assert.equal(rank([c]).winner?.id, 'a');
 });
+
+test('timing-only exclusion is issued only after every pricing, binding and funding check passes',()=>{
+ const unknown=()=>({...candidate(),completionMs:null,legQuotes:[{...candidate().legQuotes[0]!,estimatedCompletionMs:null}]});
+ assert.equal(why(unknown()),'UNKNOWN_COMPLETION_TIME');
+ assert.equal(rank([unknown()]).winner,null);
+ const mutations:[(c:RouteCandidate)=>void,string][]=[
+  [c=>{c.legQuotes[0]!.feeBps=null;},'UNKNOWN_COSTS'],
+  [c=>{c.legQuotes[0]!.liquidityConfirmed=false;},'LIQUIDITY_NOT_CONFIRMED'],
+  [c=>{c.legQuotes[0]!.amountInRaw='999';},'LEG_BINDING_MISMATCH'],
+  [c=>{c.legQuotes[0]!.expiresAtMs=1001;},'LEG_EXPIRY_MISMATCH'],
+  [c=>{c.legQuotes[0]!.pricingValidUntilMs=999;},'STALE_PRICING_EVIDENCE'],
+  [c=>{c.legQuotes[0]!.expectedOutRaw='1200';},'SLIPPAGE_LIMIT'],
+  [c=>{c.legQuotes[0]!.minimumOutRaw='999';},'AGGREGATE_UNDERSTATEMENT'],
+ ];
+ for(const [mutate,expected]of mutations){const c=unknown();mutate(c);assert.equal(why(c),expected);}
+ const req=request({nativeFeeBudgets:[{chainId:source.chainId,maxAmountRaw:'10'}]});
+ assert.equal(why(unknown(),req),'NATIVE_COST_UNKNOWN');
+ const c=unknown();c.legQuotes[0]!.nativeCosts=[{chainId:source.chainId,amountRaw:'11'}];
+ assert.equal(why(c,req),'NATIVE_FEE_LIMIT');
+});

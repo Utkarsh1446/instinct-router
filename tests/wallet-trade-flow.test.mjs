@@ -46,7 +46,7 @@ async function setup({supported = true, storage = new Map(), usdc = false, noPre
     if (['eth_requestAccounts','eth_accounts'].includes(request.method)) return [SENDER];
     if (request.method === 'eth_chainId') return '0x2105';
     if (request.method === 'personal_sign') return '0x'+'b'.repeat(130);
-    if (request.method === 'eth_sendTransaction') return HASH;
+    if (request.method === 'eth_sendTransaction') return calls.filter(row=>row.method==='eth_sendTransaction').length===1?HASH:'0x'+'c'.repeat(64);
     throw Error('Unexpected wallet request: '+request.method);
   }};
   host.phantom = {solana:{isPhantom:true,publicKey:{toString:()=>RECIPIENT},on(){},
@@ -54,6 +54,8 @@ async function setup({supported = true, storage = new Map(), usdc = false, noPre
     async signMessage() { throw Error('Destination must not sign'); }}};
   globalThis.document = {getElementById:$,createElement:()=>new Element()};
   globalThis.window = host;
+  const locks = new Set();
+  host.navigator={locks:{async request(name,options,callback){assert.equal(options.ifAvailable,true);if(locks.has(name))return callback(null);locks.add(name);try{return await callback({name});}finally{locks.delete(name);}}}};
   globalThis.localStorage = {getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)};
   const source = solanaSource ? {chainId:'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',address:'11111111111111111111111111111111',decimals:9} : usdc ? {...SOURCE,address:genericToken?'0x'+'3'.repeat(40):'0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',decimals:6} : SOURCE;
   const destination = solanaSource ? SOURCE : usdc ? {...DESTINATION,chainId:'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'} : DESTINATION;
@@ -96,7 +98,7 @@ async function setup({supported = true, storage = new Map(), usdc = false, noPre
       return {execution:structuredClone(record)};
     },
     async claimExecution() { apiCalls.push('claim'); const action=actions[record.nextAction]; record={...record,status:'CLAIMED',revision:record.revision+1,claimedActionId:action.id}; return {execution:structuredClone(record),action}; },
-    async submitExecution(id,input) { apiCalls.push('submit'); assert.equal(input.transactionHash,HASH); record={...record,status:'SUBMITTED',revision:record.revision+1,submissions:[...record.submissions,{actionId:record.claimedActionId,hash:HASH}]}; return {execution:structuredClone(record)}; },
+    async submitExecution(id,input) { apiCalls.push('submit'); assert.equal(input.transactionHash,record.nextAction===0?HASH:'0x'+'c'.repeat(64)); record={...record,status:'SUBMITTED',revision:record.revision+1,submissions:[...record.submissions,{actionId:record.claimedActionId,hash:input.transactionHash}]}; return {execution:structuredClone(record)}; },
     async getExecution() { apiCalls.push('get'); return {execution:structuredClone(record)}; },
     async refreshExecution() { apiCalls.push('refresh'); if(usdc && approvalConfirmed && record.nextAction===0) record={...record,status:'READY',revision:record.revision+1,nextAction:1,claimedActionId:null}; return {execution:structuredClone(record),...(observedProgress?{progress:observedProgress}:{})}; },
     async markExecutionUncertain() { apiCalls.push('uncertain'); record={...record,status:'RECOVERY_REQUIRED',revision:2}; return {execution:structuredClone(record)}; },
@@ -106,7 +108,7 @@ async function setup({supported = true, storage = new Map(), usdc = false, noPre
   const scheduled = new Map(); let nextTimer = 0;
   const timers = {setTimeout(fn, delay) { const id=++nextTimer; scheduled.set(id,{fn,delay}); return id; },clearTimeout(id) { scheduled.delete(id); }};
   initWalletUi(client,getInput,config,timers);
-  return {$,calls,apiCalls,storage,client,config,host,confirmApproval:()=>{approvalConfirmed=true;},setProgress:stage=>{observedProgress={routeId:record.plan.routeId,actionId:actions[record.nextAction].id,sourceTransactionHash:HASH,stage,observedAtMs:Date.now(),sourceConfirmations:2,requiredSourceConfirmations:12,...(stage==='DESTINATION_CONFIRMED'?{destination:{chainId:record.plan.destination.chainId,transactionHash:encodeBase58(new Uint8Array(64).fill(2)),asset:record.plan.destination,recipient:record.plan.recipient,amountRaw:record.plan.minimumOutRaw,commitment:'confirmed'}}:{})};}, enter(id,value) { $(id).value=value; $(id).dispatchEvent(new Event('input')); $('quote-form').dispatchEvent(new Event('input')); },
+  return {$,calls,apiCalls,storage,client,config,host,confirmApproval:()=>{approvalConfirmed=true;},setProgress:stage=>{observedProgress={routeId:record.plan.routeId,actionId:actions[record.nextAction].id,sourceTransactionHash:record.submissions.at(-1)?.hash??HASH,stage,observedAtMs:Date.now(),sourceConfirmations:2,requiredSourceConfirmations:12,...(stage==='DESTINATION_CONFIRMED'?{destination:{chainId:record.plan.destination.chainId,transactionHash:encodeBase58(new Uint8Array(64).fill(2)),asset:record.plan.destination,recipient:record.plan.recipient,amountRaw:record.plan.minimumOutRaw,commitment:'confirmed'}}:{})};}, enter(id,value) { $(id).value=value; $(id).dispatchEvent(new Event('input')); $('quote-form').dispatchEvent(new Event('input')); },
     progress:()=>structuredClone(observedProgress),
     saved:()=>JSON.parse(storage.get('instinct-router-recovery-v1')??'null'),
     scheduled,

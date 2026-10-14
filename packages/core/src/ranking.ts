@@ -48,8 +48,9 @@ function reasons(request: RouterRequest, c: RouteCandidate, options: RankingOpti
     if (c.priceImpactBps > request.maxPriceImpactBps) return ['PRICE_IMPACT_LIMIT'];
     if (!ms(c.quotedAtMs) || c.quotedAtMs > options.nowMs || !ms(c.deadlineMs) ||
         c.deadlineMs <= options.nowMs || c.deadlineMs > request.deadlineMs) return ['QUOTE_EXPIRED_OR_INVALID_CLOCK'];
-    if (!duration(c.completionMs)) return ['UNKNOWN_COMPLETION_TIME'];
-    if (c.completionMs > request.maxCompletionMs || options.nowMs + c.completionMs > request.deadlineMs) return ['COMPLETION_LIMIT'];
+    // Timing-only previews must still pass every economic and binding check.
+    let knownCompletion = duration(c.completionMs);
+    if (knownCompletion && (c.completionMs! > request.maxCompletionMs || options.nowMs + c.completionMs! > request.deadlineMs)) return ['COMPLETION_LIMIT'];
     const path = c.path;
     if (!path || !text(path.id) || !same(path.source, c.source) || !same(path.destination, c.destination) ||
         path.executionReady !== false || !Array.isArray(path.legs) || path.legs.length < 1 || path.legs.length > 8 ||
@@ -73,7 +74,7 @@ function reasons(request: RouterRequest, c: RouteCandidate, options: RankingOpti
           (quote.conditional && !c.conditional)) return ['LEG_BINDING_MISMATCH'];
       if (quote.liquidityConfirmed !== true) return ['LIQUIDITY_NOT_CONFIRMED'];
       if (!feeBps(quote.feeBps) || !bps(quote.priceImpactBps)) return ['UNKNOWN_COSTS'];
-      if (!duration(quote.estimatedCompletionMs)) return ['UNKNOWN_COMPLETION_TIME'];
+      if (!duration(quote.estimatedCompletionMs)) knownCompletion = false;
       if (!ms(quote.expiresAtMs) || quote.expiresAtMs < c.deadlineMs) return ['LEG_EXPIRY_MISMATCH'];
       if (quote.pricingValidUntilMs !== undefined && (!ms(quote.pricingValidUntilMs) ||
           quote.pricingValidUntilMs <= options.nowMs || quote.pricingValidUntilMs > quote.expiresAtMs)) return ['STALE_PRICING_EVIDENCE'];
@@ -81,7 +82,7 @@ function reasons(request: RouterRequest, c: RouteCandidate, options: RankingOpti
       if (out <= 0n || out > estimated) return ['INVALID_OUTPUT'];
       if (out < estimated * BigInt(10000 - request.slippageBps) / 10000n) return ['SLIPPAGE_LIMIT'];
       if (options.requireExecutable && (!text(quote.executableRecipeId) || quote.conditional || leg.executionTier !== 'WALLET_SIGNED')) return ['NOT_EXECUTABLE'];
-      fees += quote.feeBps; impact += quote.priceImpactBps; totalDuration += quote.estimatedCompletionMs;
+      fees += quote.feeBps; impact += quote.priceImpactBps; totalDuration += duration(quote.estimatedCompletionMs) ? quote.estimatedCompletionMs : 0;
       input = out; previous = leg.destination;
       if (request.nativeFeeBudgets !== undefined && !Array.isArray(quote.nativeCosts)) return ['NATIVE_COST_UNKNOWN'];
       if (quote.nativeCosts !== undefined) {
@@ -94,12 +95,12 @@ function reasons(request: RouterRequest, c: RouteCandidate, options: RankingOpti
     }
     const last = c.legQuotes[c.legQuotes.length - 1]!;
     if (!same(previous, c.destination) || last.minimumOutRaw !== c.minimumOutputRaw || last.expectedOutRaw !== c.expectedOutputRaw ||
-        c.feeBps < fees || c.priceImpactBps < impact || c.completionMs < totalDuration) return ['AGGREGATE_UNDERSTATEMENT'];
+        c.feeBps < fees || c.priceImpactBps < impact || duration(c.completionMs) && c.completionMs < totalDuration) return ['AGGREGATE_UNDERSTATEMENT'];
     if (c.timing) {
       const t = c.timing;
       if (!['CONFIGURED', 'OBSERVED_CLEAN_NETWORK'].includes(t.basis) || !ms(t.uncertaintyMs) ||
           [t.protocolMs, t.walletMs, t.observationMs].some(n => n !== null && !ms(n)) ||
-          (t.protocolMs !== null && c.completionMs < t.protocolMs + t.uncertaintyMs)) return ['INVALID_TIMING_BREAKDOWN'];
+          (t.protocolMs !== null && duration(c.completionMs) && c.completionMs < t.protocolMs + t.uncertaintyMs)) return ['INVALID_TIMING_BREAKDOWN'];
     }
     if (request.nativeFeeBudgets !== undefined) {
       const budgets = new Map(request.nativeFeeBudgets.map(b => [b.chainId as string, b.maxAmountRaw === null ? null : raw(b.maxAmountRaw)]));
@@ -109,6 +110,7 @@ function reasons(request: RouterRequest, c: RouteCandidate, options: RankingOpti
       }
     }
     if (delivered <= 0n) return ['NONPOSITIVE_OUTPUT'];
+    if (!knownCompletion) return ['UNKNOWN_COMPLETION_TIME'];
     return [];
   } catch { return ['INVALID_CANDIDATE']; }
 }

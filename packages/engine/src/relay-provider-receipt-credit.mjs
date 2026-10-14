@@ -10,10 +10,11 @@ export function hashFor(vm,value,block=false){return vm==='EVM'?typeof value==='
 const addressTopic=v=>'0x'+v.slice(2).toLowerCase().padStart(64,'0');
 export function evmTokenCredit(receipt,asset,recipient){
  if(!Array.isArray(receipt.logs)||receipt.logs.length>2048)fail('DESTINATION_EVIDENCE_INVALID');
- let net=0n;
+ let net=0n;const indices=new Set();
  for(const log of receipt.logs){if(!eq(log.address,asset.address))continue;
   if(!Array.isArray(log.topics)||log.topics[0]?.toLowerCase()!=='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef')continue;
   if(log.removed!==false||!eq(log.transactionHash,receipt.transactionHash)||!eq(log.blockHash,receipt.blockHash)||log.blockNumber!==receipt.blockNumber||log.topics.length!==3||log.topics.some(t=>!/^0x[0-9a-f]{64}$/i.test(t))||!/^0x[0-9a-f]{64}$/i.test(log.data))fail('DESTINATION_EVIDENCE_INVALID');
+  const index=quantity(log.logIndex);if(indices.has(index))fail('DESTINATION_EVIDENCE_INVALID');indices.add(index);
   const n=BigInt(log.data);if(eq(log.topics[2],addressTopic(recipient)))net+=n;if(eq(log.topics[1],addressTopic(recipient)))net-=n;
  }
  return net;

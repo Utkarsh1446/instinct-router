@@ -54,6 +54,43 @@ test('lost wallet response blocks another execution and never retries signing',a
   await assert.rejects(c.prepare(input),code('RECOVERY_REQUIRED'));await assert.rejects(c.execute(review,()=>true),code('RECOVERY_REQUIRED'));
   await c.resume();assert.equal(calls,1);
 });
+test('uncertainty reporting cannot replace the durable claimed review with a different plan',async()=>{
+  const f=await fixture(), c=f.controller();await c.proveOwnership();const review=await c.prepare(input);
+  f.adapter.sendTransaction=async()=>{throw Error('wallet response lost');};
+  f.client.markExecutionUncertain=async()=>{const changed=structuredClone(f.record);changed.status='RECOVERY_REQUIRED';changed.revision++;changed.plan.minimumOutRaw='999';return {execution:changed};};
+  await assert.rejects(c.execute(review,()=>true),/wallet response lost/);
+  assert.deepEqual(c.getRecovery().record.plan,review.plan);
+  assert.equal(c.getRecovery().record.status,'CLAIMED');
+  assert.equal(c.getRecovery().phase,'RECOVERY_REQUIRED');
+  assert.equal(f.sends(),0);
+});
+test('two controllers sharing recovery cannot reconcile over an outstanding wallet handoff',async()=>{
+  const f=await fixture(),a=f.controller(),b=f.controller();await a.proveOwnership();await b.proveOwnership();const review=await a.prepare(input);
+  let release,started;const pending=new Promise(resolve=>{release=resolve;}),ready=new Promise(resolve=>{started=resolve;});
+  f.adapter.sendTransaction=async()=>{started();await pending;return '0x'+'aa'.repeat(32);};
+  f.client.submitExecution=async()=>{throw Error('report offline');};
+  const sending=a.execute(review,()=>true);await ready;
+  try { await assert.rejects(b.resume(),code('EXECUTION_BUSY')); }
+  finally { release();await assert.rejects(sending,/report offline/); }
+  assert.equal(a.getRecovery().phase,'SUBMIT_PENDING');assert.equal(a.getRecovery().transactionHash,'0x'+'aa'.repeat(32));
+});
+test('browser Web Locks reject contended recovery across distinct tab storage handles without waiting',async t=>{
+  const previous=globalThis.window;t.after(()=>{if(previous===undefined)delete globalThis.window;else globalThis.window=previous;});
+  const locked=new Set();globalThis.window={navigator:{locks:{async request(name,options,callback){assert.deepEqual(options,{mode:'exclusive',ifAvailable:true});if(locked.has(name))return callback(null);locked.add(name);try{return await callback({name});}finally{locked.delete(name);}}}}};
+  const f=await fixture(),a=f.controller(),b=createExecutionController({client:f.client,wallet:f.adapter,storage:{getItem:key=>f.storage.getItem(key),setItem:(key,value)=>f.storage.setItem(key,value)}});
+  await a.proveOwnership();await b.proveOwnership();const review=await a.prepare(input);
+  let release,started;const pending=new Promise(resolve=>{release=resolve;}),ready=new Promise(resolve=>{started=resolve;});
+  f.adapter.sendTransaction=async()=>{started();await pending;return '0x'+'aa'.repeat(32);};f.client.submitExecution=async()=>{throw Error('report offline');};
+  const sending=a.execute(review,()=>true);await ready;
+  try{assert.equal(b.getRecovery().phase,'WALLET_PENDING');await assert.rejects(b.resume(),code('EXECUTION_BUSY'));}
+  finally{release();await assert.rejects(sending,/report offline/);}
+  assert.equal(locked.size,0);assert.equal(b.getRecovery().transactionHash,'0x'+'aa'.repeat(32));
+});
+test('browser without Web Locks can read recovery and prove ownership but cannot persist or sign a trade',async t=>{
+  const previous=globalThis.window;t.after(()=>{if(previous===undefined)delete globalThis.window;else globalThis.window=previous;});globalThis.window={navigator:{}};
+  const f=await fixture(),c=f.controller();assert.equal(c.getRecovery(),null);await c.proveOwnership();
+  await assert.rejects(c.prepare(input),code('EXECUTION_LOCK_UNAVAILABLE'));assert.equal(c.getRecovery(),null);assert.equal(f.sends(),0);
+});
 test('known hash survives report failure and resumes durable status without wallet resend',async()=>{
   const f=await fixture(), c=f.controller();await c.proveOwnership();const review=await c.prepare(input),submit=f.client.submitExecution;
   f.client.submitExecution=async()=>{throw Error('network');};await assert.rejects(c.execute(review,()=>true));
@@ -226,7 +263,7 @@ test('terminal receipt is required; failed proof cannot claim successful credit'
   assert.throws(()=>validateRecord(f.record),code('PROTOCOL_ERROR'));
   const receipt={chainId:wallet.chainId,transactionHash:hash,blockNumberRaw:'100',blockHash:'0x'+'bb'.repeat(32),observedAtMs:Date.now(),confirmations:12,destinationCredit:{asset:destination,recipient:wallet.address,amountRaw:'1'}};
   f.record.receipt=receipt;validateRecord(f.record);
-  f.record.status='FAILED';f.record.nextAction=0;assert.throws(()=>validateRecord(f.record),code('PROTOCOL_ERROR'));
+  f.record.status='FAILED';f.record.nextAction=0;f.record.claimedActionId=f.action.id;assert.throws(()=>validateRecord(f.record),code('PROTOCOL_ERROR'));
   delete receipt.destinationCredit;validateRecord(f.record);
 });
 test('recovery revisions never erase or rewrite submissions, receipt or timeline evidence',async()=>{
@@ -336,6 +373,19 @@ async function twoActionFixture() {
   f.adapter.sendTransaction=async()=>{sends++;return '0x'+(sends===1?'aa':'cc').repeat(32);};
   return {...f,approve,deposit,sends:()=>sends};
 }
+
+test('execution records require ordered submissions and source receipts for the latest action',async()=>{
+  const f=await twoActionFixture(), approveHash='0x'+'aa'.repeat(32),depositHash='0x'+'cc'.repeat(32);
+  const submitted={...structuredClone(f.record),status:'SUBMITTED',nextAction:1,claimedActionId:f.deposit.id,submissions:[{actionId:f.approve.id,hash:approveHash},{actionId:f.deposit.id,hash:depositHash}]};
+  validateRecord(submitted);
+  for(const mutate of [row=>row.submissions.pop(),row=>row.submissions.reverse(),row=>{row.status='CLAIMED';},row=>{row.submissions[1].hash=approveHash;}]) {
+    const bad=structuredClone(submitted);mutate(bad);assert.throws(()=>validateRecord(bad),code('PROTOCOL_ERROR'));
+  }
+  const bad=structuredClone(submitted);
+  bad.receipt={chainId:wallet.chainId,transactionHash:approveHash,blockNumberRaw:'1',blockHash:'0x'+'bb'.repeat(32),observedAtMs:Date.now(),confirmations:12};
+  assert.throws(()=>validateRecord(bad),code('PROTOCOL_ERROR'));
+  bad.receipt.transactionHash=depositHash;validateRecord(bad);
+});
 
 test('confirmed intermediate action saves a fresh review and clears prior hash only after advancement',async()=>{
   const f=await twoActionFixture(),c=f.controller();await c.proveOwnership();const review=await c.prepare(input);

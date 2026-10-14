@@ -154,7 +154,8 @@ export function createPhantomWallet(provider, chainId = 'solana:mainnet') {
       // Send the reviewed bytes unchanged. The receipt verifier separately
       // checks any safety assertions added by the wallet; never retry submission.
       const result=await provider.request({method:'signAndSendTransaction',params:{message:transaction.serialized ?? encodeBase58(serializeUnsignedTransaction(transaction.message))}});
-      await bound(account);
+      // The wallet may switch accounts or disconnect after broadcasting. Preserve
+      // its returned hash for recovery; account binding applies before handoff.
       try { decodeBase58(result?.signature,64); } catch { fail('WALLET_RESPONSE_INVALID', 'Submission status is unknown. Keep the recovery record.'); }
       return result.signature;
     },

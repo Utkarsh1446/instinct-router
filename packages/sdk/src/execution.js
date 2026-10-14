@@ -2,6 +2,7 @@ import { RouterSdkError, invalid } from './errors.js';
 import { parseJson } from './json.js';
 import { same, validateRecord, validateAction, walletTransaction, transactionHash, validateProgress } from './execution-validation.js';
 const fail = (code, message) => { throw new RouterSdkError(code, message); };
+const storageOperations = new WeakMap();
 const terminal = status => ['COMPLETE','CANCELLED','EXPIRED','FAILED'].includes(status);
 const unsentPrepareTimeoutMs = 30000;
 const unsent = saved => saved && !saved.transactionHash && (saved.phase === 'PREPARE_PENDING' && !saved.record ||
@@ -39,9 +40,24 @@ export function createExecutionController({ client, wallet, storage, storageKey 
     if (selected.chainId !== record.plan.source.chainId || selected.address !== record.plan.sender || !same(selected, session?.wallet))
       fail('WALLET_CHANGED', 'Select the reviewed wallet account and network before continuing.');
   }
-  async function exclusive(fn) {
+  async function exclusive(fn, persist = true) {
     if (busy) fail('EXECUTION_BUSY', 'An execution operation is already running.');
-    busy = true; progress = null; try { return await fn(); } catch (error) { progress = null; throw error; } finally { busy = false; }
+    const active = storageOperations.get(storage) ?? new Set();
+    if (persist && active.has(storageKey)) fail('EXECUTION_BUSY', 'Another execution operation is using this recovery record.');
+    busy = true; progress = null;
+    if (persist) { active.add(storageKey); storageOperations.set(storage, active); }
+    try {
+      if (persist && typeof globalThis.window !== 'undefined') {
+        const locks = globalThis.window.navigator?.locks;
+        if (typeof locks?.request !== 'function') fail('EXECUTION_LOCK_UNAVAILABLE', 'This browser cannot safely coordinate transfer recovery across tabs. Use a browser with Web Locks support.');
+        return await locks.request('instinct-router-execution:' + storageKey, { mode: 'exclusive', ifAvailable: true }, async lock => {
+          if (!lock) fail('EXECUTION_BUSY', 'Another browser tab is using this recovery record.');
+          return fn();
+        });
+      }
+      return await fn();
+    } catch (error) { progress = null; throw error; }
+    finally { if (persist) active.delete(storageKey); busy = false; }
   }
   async function reconcileUnsent(saved, auth) {
     if (!unsent(saved)) fail('RECOVERY_REQUIRED', 'This execution requires transaction recovery.');
@@ -67,7 +83,7 @@ export function createExecutionController({ client, wallet, storage, storageKey 
         const verified = await client.verifyWallet({ challengeId: challenge.challengeId, signature });
         if (!same(verified.wallet, selected)) fail('PROTOCOL_ERROR', 'Ownership verification returned a different wallet.');
         session = verified; return { wallet: { ...session.wallet }, expiresAtMs: session.expiresAtMs };
-      });
+      }, false);
     },
     async prepare(input) {
       return exclusive(async () => {
@@ -125,7 +141,7 @@ export function createExecutionController({ client, wallet, storage, storageKey 
           const current = load();
           if (!current?.transactionHash) {
             save({ phase: 'RECOVERY_REQUIRED', record: claimed.execution });
-            try { const result = await client.markExecutionUncertain(review.id, auth); save({ phase: 'RECOVERY_REQUIRED', record: result.execution }); } catch { /* Recovery remains saved. */ }
+            try { const result = await client.markExecutionUncertain(review.id, auth); validateRecord(result.execution, claimed.execution); save({ phase: 'RECOVERY_REQUIRED', record: result.execution }); } catch { /* Recovery remains saved. */ }
           }
           throw error;
         }

@@ -42,6 +42,16 @@ export function createMemoryWalletAuthStore({ now = Date.now, maxEntries = 1024 
   };
 }
 const storageUnavailable = () => fault(503, 'WALLET_AUTH_UNAVAILABLE', 'Wallet proof storage is unavailable. Try again shortly.', true);
+function validateStoredSession(row) {
+  if (row == null) return;
+  try {
+    strict(row, ['scope', 'wallet', 'expiresAtMs']);
+    strict(row.wallet, ['chainId', 'address']);
+    const normalized = walletIdentity(row.wallet.chainId, row.wallet.address);
+    if (typeof row.scope !== 'string' || !Number.isSafeInteger(row.expiresAtMs) || row.expiresAtMs < 0 ||
+        normalized.chainId !== row.wallet.chainId || normalized.address !== row.wallet.address) throw new Error();
+  } catch { storageUnavailable(); }
+}
 // Wrong-scope requests cannot destroy another app/origin's challenge. Consumption
 // is atomic across instances, before asynchronous signature verification.
 const consumeScript = `local raw = redis.call('GET', KEYS[1])
@@ -113,6 +123,7 @@ export function createWalletAuthentication({ now = Date.now, maxEntries = 1024, 
       const token = single(req, 'x-router-wallet-token');
       if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) fault(401, 'WALLET_AUTH_REQUIRED', 'Prove source wallet control before continuing.');
       return mapResult(stored('getSession', createHash('sha256').update(token).digest('hex')), row => {
+        validateStoredSession(row);
         if (!row || row.scope !== scope(app, origin) || row.expiresAtMs <= now()) fault(401, 'WALLET_AUTH_REQUIRED', 'Prove source wallet control before continuing.');
         return { ...row.wallet, ownerId: walletOwner(app.id, row.wallet) };
       });

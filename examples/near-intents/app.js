@@ -1,50 +1,69 @@
 import { CapabilityRegistry, DynamicRouter, createNearIntentsOneClickAdapter, createRelayAdapter, rankCandidates } from './core/index.js';
 import { PRESETS, previewBand } from './presets.js';
 import { TESTNET_AUDIT } from './audit.js';
-import { formatBps, formatDuration, formatRawAmount, parseDecimalAmount } from './units.js';
+import { formatDuration, formatRawAmount, parseDecimalAmount } from './units.js';
 
 const $ = (id) => document.getElementById(id);
-const pairSelect = $('pair');
-const DRY_STEPS = [
-  { id: 'quote', state: 'complete', title: 'Dry quote', detail: 'Ask 1Click with dry:true. No swap is opened.' },
-  { id: 'deposit-address', state: 'withheld', title: 'Deposit address', detail: 'Withheld. A live quote would return an origin-chain address. This demo rejects one if it appears.' },
-  { id: 'send', state: 'blocked', title: 'Send funds', detail: 'Blocked. There is no address, and this page cannot submit a transfer.' },
-  { id: 'audit', state: 'ready', title: 'Audit hash', detail: 'The quote hash can be written to the NEAR testnet contract. That write does not settle the swap.' },
-];
+let presetId = PRESETS[0].id;
+let objectiveName = 'BALANCED';
 let last = null;
+let onChain = null;
 
-function selectedPreset() {
-  return PRESETS.find(preset => preset.id === pairSelect.value) ?? PRESETS[0];
+function preset() {
+  return PRESETS.find(item => item.id === presetId) ?? PRESETS[0];
 }
 
-function fillPreset() {
-  const preset = selectedPreset();
-  $('amount').value = preset.amount;
-  $('sender').value = preset.sender;
-  $('recipient').value = preset.recipient;
-  $('pair-note').textContent = preset.note;
+function objectiveLabel(name = objectiveName) {
+  if (name === 'BEST_OUTPUT') return 'Best output';
+  if (name === 'FASTEST') return 'Fastest';
+  return 'Balanced';
 }
 
-function objective() {
-  return $('objective').value;
+function chainLabel(asset) {
+  if (asset.blockchain === 'eth') return 'Ethereum';
+  if (asset.blockchain === 'base') return 'Base';
+  if (asset.blockchain === 'near') return 'NEAR';
+  return asset.blockchain;
+}
+
+function whereLabel(asset) {
+  return `on ${chainLabel(asset)}`;
+}
+
+function shorten(value, head = 8, tail = 12) {
+  if (typeof value !== 'string' || value.length <= head + tail + 1) return value || '';
+  return `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
+function fillChrome() {
+  const current = preset();
+  $('source-chain').textContent = chainLabel(current.source);
+  $('source-symbol').textContent = current.source.symbol;
+  $('dest-chain').textContent = chainLabel(current.destination);
+  $('dest-symbol').textContent = current.destination.symbol;
+  $('dest-where').textContent = whereLabel(current.destination);
+  $('provider-count').textContent = `${current.relay ? '2 providers' : '1 provider'} · ranked by output, fee, ETA`;
+  $('pair-note').textContent = current.relay
+    ? 'Switch the pair to USDC on NEAR: Relay is not registered there, so only the 1Click dry quote returns.'
+    : 'USDC on NEAR is selected. Relay is not registered, so only the 1Click dry quote returns. Switch back to USDC on Base.';
+  const amount = $('amount').value.trim() || current.amount;
+  $('pair-tag').textContent = `${current.source.symbol} (${chainLabel(current.source)}) → ${current.destination.symbol} (${chainLabel(current.destination)}) · ${amount}`;
+  for (const button of document.querySelectorAll('[data-objective]')) {
+    button.classList.toggle('on', button.dataset.objective === objectiveName);
+  }
 }
 
 function chainConfig(asset) {
   return {
-    chainId: asset.chainId,
-    blockchain: asset.blockchain,
-    sourceConfirmationMs: asset.confirmationMs,
-    destinationVerificationMs: asset.confirmationMs,
+    chainId: asset.chainId, blockchain: asset.blockchain,
+    sourceConfirmationMs: asset.confirmationMs, destinationVerificationMs: asset.confirmationMs,
   };
 }
 
 function relayChain(asset) {
   return {
-    chainId: asset.chainId,
-    relayChainId: asset.relayChainId,
-    relayProtocolChainId: asset.relayProtocolChainId,
-    sourceConfirmationMs: asset.confirmationMs,
-    destinationVerificationMs: asset.confirmationMs,
+    chainId: asset.chainId, relayChainId: asset.relayChainId, relayProtocolChainId: asset.relayProtocolChainId,
+    sourceConfirmationMs: asset.confirmationMs, destinationVerificationMs: asset.confirmationMs,
   };
 }
 
@@ -59,167 +78,260 @@ function assetOf(endpoint) {
   return { chainId: endpoint.chainId, address: endpoint.address, decimals: endpoint.decimals };
 }
 
-function buildRequest(preset) {
-  const amountRaw = parseDecimalAmount($('amount').value.trim(), preset.source.decimals);
-  const sender = $('sender').value.trim();
-  const recipient = $('recipient').value.trim();
-  const band = previewBand(objective());
+function buildRequest(current) {
   return {
     requestId: `demo-${Date.now()}`,
-    source: assetOf(preset.source),
-    destination: assetOf(preset.destination),
-    amountRaw, sender, recipient,
+    source: assetOf(current.source),
+    destination: assetOf(current.destination),
+    amountRaw: parseDecimalAmount($('amount').value.trim(), current.source.decimals),
+    sender: current.sender,
+    recipient: current.recipient,
     slippageBps: 50,
     maxFeeBps: 100,
     maxPriceImpactBps: 500,
     maxCompletionMs: 600_000,
     deadlineMs: Date.now() + 60 * 60 * 1000,
-    optimization: { objective: objective(), maxOutputShortfallBps: band },
+    optimization: { objective: objectiveName, maxOutputShortfallBps: previewBand(objectiveName) },
   };
 }
 
-function renderSteps(steps) {
-  $('steps').replaceChildren(...steps.map(step => {
-    const node = document.createElement('article');
-    node.className = 'step';
-    node.dataset.state = step.state;
-    const title = document.createElement('strong');
-    title.textContent = step.title;
-    const detail = document.createElement('p');
-    detail.textContent = step.detail;
-    node.append(title, detail);
-    return node;
-  }));
+function ordered(ranked, candidates) {
+  const ids = new Set((ranked.eligible ?? []).map(candidate => candidate.id));
+  return [...(ranked.eligible ?? []), ...candidates.filter(candidate => !ids.has(candidate.id))];
 }
 
-function providerName(id) {
-  if (id === 'near-intents-1click') return 'NEAR Intents 1Click';
-  if (id === 'relay') return 'Relay';
-  return id;
+function deltaText(candidate, winner, decimals) {
+  if (!winner || candidate.id === winner.id) return '';
+  const diff = BigInt(candidate.expectedOutputRaw) - BigInt(winner.expectedOutputRaw);
+  if (diff === 0n) return ' · same output as #1';
+  const negative = diff < 0n;
+  const text = formatRawAmount((negative ? -diff : diff).toString(), decimals);
+  return ` · ${negative ? '−' : '+'}${text} vs #1`;
+}
+
+function selectionWhy(winner, rows) {
+  if (!winner) return 'No route cleared the output, fee, and ETA limits.';
+  const rest = rows.filter(row => row.id !== winner.id && row.expectedOutputRaw && row.completionMs);
+  const higherOutput = rest.every(row => BigInt(winner.expectedOutputRaw) >= BigInt(row.expectedOutputRaw));
+  const shorterEta = winner.completionMs != null && rest.every(row => row.completionMs == null || winner.completionMs <= row.completionMs);
+  if (!rest.length) return 'Selected: only quoted route';
+  if (higherOutput && shorterEta) return 'Selected: higher output and shorter ETA on this comparison';
+  if (objectiveName === 'BEST_OUTPUT') return 'Selected: highest output';
+  if (objectiveName === 'FASTEST') return 'Selected: shortest ETA inside the 2% output band';
+  return 'Selected: shortest ETA inside the 0.50% output band';
+}
+
+function metric(label, value) {
+  const node = document.createElement('div');
+  node.append(label);
+  const strong = document.createElement('b');
+  strong.textContent = value;
+  node.append(strong);
+  return node;
 }
 
 function renderRoutes(ranked, candidates, decimals) {
+  const rows = ordered(ranked, candidates);
+  const winner = ranked.winner;
   const excluded = new Map((ranked.excluded ?? []).map(row => [row.id, row.reasons]));
-  $('selection').textContent = ranked.selectionReason === 'NO_ELIGIBLE_ROUTE'
-    ? 'No route cleared the limits'
-    : ranked.selectionReason.replaceAll('_', ' ').toLowerCase();
-  if (!candidates.length) {
-    $('routes').replaceChildren(Object.assign(document.createElement('p'), { className: 'empty', textContent: 'No provider returned a quote.' }));
+  $('receive').textContent = winner ? formatRawAmount(winner.expectedOutputRaw, decimals) : '—';
+  if (!rows.length) {
+    $('route-list').replaceChildren(Object.assign(document.createElement('p'), { className: 'empty', textContent: 'No provider returned a quote.' }));
+    $('cmp').hidden = true;
     return;
   }
-  const ordered = [...candidates].sort((a, b) => {
-    if (a.id === ranked.winner?.id) return -1;
-    if (b.id === ranked.winner?.id) return 1;
-    return a.id.localeCompare(b.id);
-  });
-  $('routes').replaceChildren(...ordered.map(candidate => {
+  const why = selectionWhy(winner, rows);
+  $('route-list').replaceChildren(...rows.map((candidate, index) => {
     const leg = candidate.legQuotes[0];
     const card = document.createElement('article');
+    const selected = candidate.id === winner?.id;
     const reasons = excluded.get(candidate.id) ?? [];
-    const selected = candidate.id === ranked.winner?.id;
-    card.className = `route${selected ? ' selected' : ''}${reasons.length ? ' excluded' : ''}`;
-    const heading = document.createElement('h2');
-    heading.textContent = providerName(leg.adapterId);
+    card.className = `route${selected ? ' sel' : ''}`;
+    const rank = document.createElement('div');
+    rank.className = 'rk';
+    rank.textContent = String(index + 1);
+    const body = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'pv';
+    title.append(leg.adapterId === 'relay' ? 'Relay' : leg.adapterId === 'near-intents-1click' ? 'NEAR Intents 1Click' : leg.adapterId);
+    if (leg.adapterId === 'relay') {
+      const note = document.createElement('small');
+      note.textContent = 'existing adapter · useDepositAddress: false';
+      title.append(note);
+    }
     if (leg.dryQuote === true) {
       const badge = document.createElement('span');
-      badge.className = 'badge';
+      badge.className = 'dry';
       badge.textContent = 'DRY QUOTE';
-      heading.append(badge);
+      title.append(badge);
     }
-    const output = document.createElement('p');
-    output.className = 'meta';
-    output.textContent = `Expected ${formatRawAmount(candidate.expectedOutputRaw, decimals)} · minimum ${formatRawAmount(candidate.minimumOutputRaw, decimals)}`;
-    const costs = document.createElement('p');
-    costs.className = 'meta';
-    costs.textContent = `Fee ${formatBps(candidate.feeBps)} · impact ${formatBps(candidate.priceImpactBps)} · ETA ${formatDuration(candidate.completionMs)}`;
-    const status = document.createElement('p');
-    status.className = 'status';
-    status.textContent = selected ? 'Selected' : reasons.length ? `Excluded: ${reasons.join(', ')}` : 'Eligible, not selected';
-    card.append(heading, output, costs, status);
+    const stats = document.createElement('div');
+    stats.className = 'sp';
+    stats.append(
+      metric('Output', formatRawAmount(candidate.expectedOutputRaw, decimals)),
+      metric('Fee', Number.isInteger(candidate.feeBps) ? `${candidate.feeBps} bps` : 'Unknown'),
+      metric('ETA', formatDuration(candidate.completionMs)),
+    );
+    if (leg.adapterId === 'relay') stats.append(metric('Status', 'quoted · unsigned'));
+    if (leg.dryQuote === true) stats.append(metric('Objective', objectiveName));
+    body.append(title, stats);
+    if (selected) {
+      const reason = document.createElement('div');
+      reason.className = 'why';
+      reason.textContent = why;
+      body.append(reason);
+    } else if (reasons.length) {
+      const reason = document.createElement('div');
+      reason.className = 'why';
+      reason.textContent = `Excluded: ${reasons.join(', ')}`;
+      body.append(reason);
+    }
+    const output = document.createElement('div');
+    output.className = 'out';
+    const number = document.createElement('div');
+    number.className = 'n';
+    number.textContent = formatRawAmount(candidate.expectedOutputRaw, decimals);
+    const unit = document.createElement('div');
+    unit.className = 'u';
+    unit.textContent = `${preset().destination.symbol}${deltaText(candidate, winner, decimals)}`;
+    output.append(number, unit);
+    card.append(rank, body, output);
+    if (leg.dryQuote === true) {
+      const deposit = document.createElement('div');
+      deposit.className = 'deposit';
+      const addr = document.createElement('div');
+      addr.className = 'addr';
+      addr.append('Deposit address ');
+      const issued = document.createElement('b');
+      issued.textContent = leg.dryDeposit?.depositAddress ? 'issued' : 'not issued';
+      addr.append(issued, ' · response with depositAddress, deadline or timeWhenInactive is rejected');
+      const send = document.createElement('button');
+      send.type = 'button';
+      send.className = 'send';
+      send.disabled = true;
+      send.textContent = '🔒 Send disabled';
+      deposit.append(addr, send);
+      const hash = document.createElement('div');
+      hash.className = 'hashrow';
+      hash.textContent = `quote hash sha256 · ${leg.quoteHash}`;
+      card.append(deposit, hash);
+    }
     return card;
   }));
+  renderComparison(rows, decimals);
 }
 
-function renderDeposit(candidate) {
-  const leg = candidate?.legQuotes?.[0];
-  if (!leg?.dryDeposit) {
-    $('deposit-address').textContent = 'Not issued — dry mode';
-    renderSteps(DRY_STEPS);
+function barRow(label, values, text) {
+  const row = document.createElement('div');
+  row.className = 'm';
+  const name = document.createElement('span');
+  name.textContent = label;
+  const bars = document.createElement('div');
+  bars.className = 'bars';
+  const max = Math.max(...values.map(value => value ?? 0), 0);
+  for (const [index, value] of values.entries()) {
+    const bar = document.createElement('i');
+    if (index === 0) bar.className = 'a';
+    const width = value == null || max <= 0 ? 0 : Math.max(value === 0 ? 0 : 4, Math.round((value / max) * 100));
+    bar.style.width = `${width}%`;
+    bars.append(bar);
+  }
+  const aside = document.createElement('div');
+  aside.className = 'v';
+  aside.textContent = text;
+  row.append(name, bars, aside);
+  return row;
+}
+
+function renderComparison(rows, decimals) {
+  const box = $('cmp');
+  if (rows.length < 1) { box.hidden = true; return; }
+  box.hidden = false;
+  box.replaceChildren();
+  const legend = document.createElement('div');
+  legend.className = 'lg';
+  rows.forEach((candidate, index) => {
+    const item = document.createElement('span');
+    const swatch = document.createElement('i');
+    swatch.style.background = index === 0 ? 'var(--acc)' : '#d9d8d2';
+    const leg = candidate.legQuotes[0];
+    item.append(swatch, leg.adapterId === 'relay' ? 'Relay' : 'NEAR Intents 1Click (dry)');
+    legend.append(item);
+  });
+  const spacer = document.createElement('div');
+  spacer.className = 'grow';
+  const mode = document.createElement('span');
+  mode.className = 'mono';
+  mode.textContent = `objective: ${objectiveLabel()}`;
+  legend.append(spacer, mode);
+  const outputs = rows.map(row => Number(row.expectedOutputRaw));
+  const fees = rows.map(row => Number.isInteger(row.feeBps) ? row.feeBps : null);
+  const etas = rows.map(row => Number.isInteger(row.completionMs) ? row.completionMs : null);
+  const outputText = rows.map(row => formatRawAmount(row.expectedOutputRaw, decimals)).join(' / ');
+  const feeText = fees.map(fee => fee == null ? 'unknown' : `${fee} bps`).join(' / ');
+  const etaText = etas.map(eta => formatDuration(eta)).join(' / ');
+  box.append(
+    legend,
+    barRow('Expected output', outputs, outputText),
+    barRow('Fee', fees.map(fee => fee ?? 0), feeText),
+    barRow('ETA', etas.map(eta => eta ?? 0), etaText),
+  );
+  const send = document.createElement('div');
+  send.className = 'm';
+  const label = document.createElement('span');
+  label.textContent = 'Can send now';
+  const note = document.createElement('div');
+  note.className = 'note';
+  note.textContent = rows.length > 1
+    ? 'no · no. Both are previews; the 1Click route has no address to fund.'
+    : 'no. This quote is a preview; the 1Click route has no address to fund.';
+  const value = document.createElement('div');
+  value.className = 'v';
+  const strong = document.createElement('b');
+  strong.textContent = 'quote-only';
+  value.append(strong);
+  send.append(label, note, value);
+  box.append(send);
+}
+
+function auditCell(label, value, title) {
+  const div = document.createElement('div');
+  const span = document.createElement('span');
+  span.textContent = label;
+  const strong = document.createElement('b');
+  strong.textContent = value;
+  if (title) strong.title = title;
+  div.append(span, strong);
+  return div;
+}
+
+function renderAudit() {
+  const row = $('audit-row');
+  if (!onChain) {
+    row.replaceChildren(auditCell('route id', 'Reading testnet…'));
     return;
   }
-  $('deposit-address').textContent = 'Not issued — dry mode';
-  renderSteps(leg.dryDeposit.steps);
-}
-
-function auditArgs(ranked) {
-  const candidate = ranked?.candidates?.find(row => row.legQuotes[0]?.adapterId === 'near-intents-1click')
-    ?? last?.result?.candidates?.find(row => row.legQuotes[0]?.adapterId === 'near-intents-1click');
-  const leg = candidate?.legQuotes?.[0];
-  if (!leg?.quoteHash) return null;
-  return {
-    route_id: candidate.requestId,
-    quote_hash: leg.quoteHash,
-    provider_id: 'near-intents-1click',
-    expected_out: leg.expectedOutRaw,
-    minimum_out: leg.minimumOutRaw,
-    fee_bps: leg.feeBps,
-    eta_ms: candidate.completionMs,
-    objective: objective(),
-  };
-}
-
-function renderAudit(extra) {
-  const args = auditArgs(last?.ranked);
-  const lines = [];
-  if (!TESTNET_AUDIT.accountId) lines.push('Contract id is printed in the README after deploy.');
-  else {
-    const account = document.createElement('div');
-    account.append('Contract ');
-    const link = document.createElement('a');
-    link.href = TESTNET_AUDIT.explorerAccount + TESTNET_AUDIT.accountId;
-    link.target = '_blank';
-    link.rel = 'noreferrer';
-    link.textContent = TESTNET_AUDIT.accountId;
-    account.append(link);
-    if (TESTNET_AUDIT.recordTxHash) {
-      const tx = document.createElement('div');
-      tx.append('Sample record ');
-      const txLink = document.createElement('a');
-      txLink.href = TESTNET_AUDIT.explorerTx + TESTNET_AUDIT.recordTxHash;
-      txLink.target = '_blank';
-      txLink.rel = 'noreferrer';
-      txLink.className = 'hash';
-      txLink.textContent = TESTNET_AUDIT.recordTxHash;
-      tx.append(txLink);
-      account.append(tx);
-    }
-    if (extra) {
-      const recorded = document.createElement('div');
-      recorded.className = 'hash';
-      recorded.textContent = extra;
-      $('audit-body').replaceChildren(account, recorded);
-    } else $('audit-body').replaceChildren(account);
-    if (args) {
-      const block = document.createElement('pre');
-      block.className = 'hash';
-      block.textContent = `Current dry quote (not submitted by this page)\n${JSON.stringify(args, null, 2)}`;
-      $('audit-body').append(block);
-    }
+  if (onChain.error) {
+    row.replaceChildren(auditCell('route id', onChain.error));
     return;
   }
-  const node = document.createElement('div');
-  node.textContent = lines[0];
-  $('audit-body').replaceChildren(node);
-  if (args) {
-    const block = document.createElement('pre');
-    block.className = 'hash';
-    block.textContent = JSON.stringify(args, null, 2);
-    $('audit-body').append(block);
-  }
+  row.replaceChildren(
+    auditCell('route id', onChain.route_id),
+    auditCell('provider', onChain.provider_id),
+    auditCell('quote hash', shorten(onChain.quote_hash, 8, 7), onChain.quote_hash),
+    auditCell('output', onChain.expected_out),
+    auditCell('fee', `${onChain.fee_bps} bps`),
+    auditCell('eta', `${onChain.eta_ms} ms`),
+    auditCell('objective', onChain.objective),
+  );
 }
 
 async function readAudit() {
-  if (!TESTNET_AUDIT.accountId || !TESTNET_AUDIT.sampleRouteId) return;
+  if (!TESTNET_AUDIT.accountId || !TESTNET_AUDIT.sampleRouteId) {
+    onChain = { error: 'Contract id is not configured.' };
+    renderAudit();
+    return;
+  }
   const body = {
     jsonrpc: '2.0', id: 'audit', method: 'query',
     params: {
@@ -229,62 +341,61 @@ async function readAudit() {
     },
   };
   try {
-    const response = await fetch(TESTNET_AUDIT.rpcUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const response = await fetch(TESTNET_AUDIT.rpcUrl, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
     const payload = await response.json();
     const bytes = payload?.result?.result;
     if (!Array.isArray(bytes)) throw new Error(payload?.error?.message || 'RPC_ERROR');
     const decoded = JSON.parse(new TextDecoder().decode(Uint8Array.from(bytes)));
-    const tx = TESTNET_AUDIT.recordTxHash
-      ? ` Recorded in ${TESTNET_AUDIT.recordTxHash}.`
-      : '';
-    renderAudit(decoded
-      ? `On-chain sample ${decoded.route_id}: provider ${decoded.provider_id}, hash ${decoded.quote_hash}, output ${decoded.expected_out}.${tx}`
-      : `No decision stored for ${TESTNET_AUDIT.sampleRouteId}.`);
+    onChain = decoded ?? { error: `No decision stored for ${TESTNET_AUDIT.sampleRouteId}.` };
   } catch (error) {
-    renderAudit(`Could not read the audit contract (${error.message || 'RPC_ERROR'}).`);
+    onChain = { error: error?.message || 'RPC_ERROR' };
   }
+  renderAudit();
+}
+
+function setStatus(text, error = false) {
+  const node = $('form-status');
+  node.textContent = text;
+  node.dataset.error = error ? 'true' : 'false';
 }
 
 async function compare(event) {
   event.preventDefault();
   const button = $('compare');
-  const preset = selectedPreset();
+  const current = preset();
   button.disabled = true;
-  $('form-status').textContent = 'Requesting dry quotes…';
+  setStatus('Requesting dry quotes…');
   try {
-    const request = buildRequest(preset);
-    const source = assetOf(preset.source);
-    const destination = assetOf(preset.destination);
+    const request = buildRequest(current);
+    const source = assetOf(current.source);
+    const destination = assetOf(current.destination);
     const capabilities = [capability('near-intents-1click', source, destination)];
     const adapters = [createNearIntentsOneClickAdapter({
-      chains: [chainConfig(preset.source), chainConfig(preset.destination)],
+      chains: [chainConfig(current.source), chainConfig(current.destination)],
       assets: [
-        { asset: source, assetId: preset.source.assetId },
-        { asset: destination, assetId: preset.destination.assetId },
+        { asset: source, assetId: current.source.assetId },
+        { asset: destination, assetId: current.destination.assetId },
       ],
       fetch: (...args) => fetch(...args),
       previewTtlMs: 20_000,
     })];
-    if (preset.relay) {
+    if (current.relay) {
       capabilities.push(capability('relay', source, destination));
       adapters.push(createRelayAdapter({
-        chains: [relayChain(preset.source), relayChain(preset.destination)],
+        chains: [relayChain(current.source), relayChain(current.destination)],
         fetch: (...args) => fetch(...args),
       }));
     }
     const result = await new DynamicRouter(new CapabilityRegistry(capabilities), adapters, {
       quoteBudgetMs: 8_000, providerTimeoutMs: 7_000,
     }).quote(request);
-    last = { request, result, ranked: result, preset };
-    $('form-status').textContent = result.failures.length
-      ? `Finished with ${result.failures.map(failure => failure.code).join(', ')}.`
-      : 'Dry comparison finished. Nothing was signed or sent.';
-    renderRoutes(result, result.candidates, preset.destination.decimals);
-    renderDeposit(result.candidates.find(candidate => candidate.legQuotes[0]?.dryQuote === true));
-    renderAudit();
-    await readAudit();
+    last = { request, result, ranked: result, preset: current };
+    setStatus(result.failures.length ? `Finished with ${result.failures.map(failure => failure.code).join(', ')}.` : '', result.failures.length > 0);
+    renderRoutes(result, result.candidates, current.destination.decimals);
   } catch (error) {
-    $('form-status').textContent = error?.code || error?.message || 'QUOTE_FAILED';
+    setStatus(error?.code || error?.message || 'QUOTE_FAILED', true);
   } finally {
     button.disabled = false;
   }
@@ -292,27 +403,42 @@ async function compare(event) {
 
 function rerank() {
   if (!last) return;
-  const request = { ...last.request, optimization: { objective: objective(), maxOutputShortfallBps: previewBand(objective()) } };
+  const request = { ...last.request, optimization: { objective: objectiveName, maxOutputShortfallBps: previewBand(objectiveName) } };
   try {
     const ranked = { ...last.result, ...rankCandidates(request, last.result.candidates, { nowMs: Date.now() }), request };
     last = { ...last, ranked, request };
     renderRoutes(ranked, last.result.candidates, last.preset.destination.decimals);
-    renderAudit();
+    setStatus('');
   } catch (error) {
-    $('form-status').textContent = error?.message || 'RANK_FAILED';
+    setStatus(error?.message || 'RANK_FAILED', true);
   }
 }
 
-for (const preset of PRESETS) {
-  const option = document.createElement('option');
-  option.value = preset.id;
-  option.textContent = preset.label;
-  pairSelect.append(option);
+function switchPair() {
+  presetId = presetId === 'eth-base-usdc' ? 'eth-near-usdc' : 'eth-base-usdc';
+  last = null;
+  $('amount').value = preset().amount;
+  $('receive').textContent = '—';
+  $('route-list').replaceChildren(Object.assign(document.createElement('p'), { className: 'empty', textContent: 'No quotes yet. Compare to rank this pair.' }));
+  $('cmp').hidden = true;
+  setStatus('');
+  fillChrome();
 }
-fillPreset();
-renderSteps(DRY_STEPS);
-renderAudit();
-readAudit();
-pairSelect.addEventListener('change', () => { last = null; fillPreset(); $('routes').replaceChildren(Object.assign(document.createElement('p'), { className: 'empty', textContent: 'No comparison yet.' })); renderSteps(DRY_STEPS); });
-$('objective').addEventListener('change', rerank);
+
+$('amount').addEventListener('input', fillChrome);
+$('pair-note').addEventListener('click', switchPair);
+for (const button of document.querySelectorAll('[data-objective]')) {
+  button.addEventListener('click', () => {
+    objectiveName = button.dataset.objective;
+    fillChrome();
+    rerank();
+  });
+}
+for (const button of document.querySelectorAll('[data-jump]')) {
+  button.addEventListener('click', () => {
+    document.getElementById(button.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
 $('quote-form').addEventListener('submit', compare);
+fillChrome();
+readAudit();

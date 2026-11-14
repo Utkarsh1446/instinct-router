@@ -13,7 +13,7 @@ A router can show several cross-chain prices, but a NEAR Intents quote is easy t
 ### What was added
 
 - `createNearIntentsOneClickAdapter` in `@instinct/router-core`. It calls `https://1click.chaindefuser.com/v0/quote` with `dry: true` only. A response that contains `depositAddress`, `deadline`, or `timeWhenInactive` is rejected. The adapter returns output, a fee, an ETA, and a SHA-256 quote hash that `DynamicRouter` can rank against Relay.
-- A static widget at `examples/near-intents`. The 1Click card is marked `DRY QUOTE`. The deposit panel says the address was not issued, and the send control stays disabled.
+- A static widget at `examples/near-intents`. The 1Click card is marked `DRY QUOTE`. Its deposit line says the address was not issued, and **Send disabled** stays disabled.
 - `contracts/route-audit`, a NEAR testnet contract. `record_decision` appends a route id, quote hash, provider, output, fee, ETA, and objective. It does not hold swap funds or settle an intent.
 - Chain Signatures are not implemented. A NEAR account could later sign an origin-chain deposit with them. This demo never requests a deposit address and never signs.
 
@@ -30,8 +30,8 @@ The pre-hackathon tree already included the router core, Relay, Aurora, CCTP, DE
 1. Build the static demo (commands below) and open it.
 2. Leave the pair as ETH on Ethereum to USDC on Base, amount `0.05`, rank `Balanced`.
 3. Press **Compare dry quotes**.
-4. See one card per provider. The NEAR Intents card has a `DRY QUOTE` badge. The selected card is the one with the better ranked output, fee, and ETA. `executionAuthorized` stays false.
-5. See **NEAR deposit address**. The field reads `Not issued — dry mode`. **Send funds** is disabled.
+4. See one card per provider. The NEAR Intents card has a `DRY QUOTE` badge. The selected card is the one with the better ranked output, fee, and ETA. The header stays `executionAuthorized: false`.
+5. On the 1Click card, the deposit line reads `Deposit address not issued`. **Send disabled** cannot be clicked. The comparison bars use the live output, fee, and ETA.
 6. See **Testnet audit**. It links the contract and the stored sample decision. The page does not send a transaction. A new comparison shows its own quote hash locally and does not write it on chain.
 7. Change the pair to ETH on Ethereum to USDC on NEAR and compare again. Relay is not registered for NEAR. The 1Click quote is still dry.
 

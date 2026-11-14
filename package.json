@@ -15,7 +15,8 @@
     "init:dev": "node scripts/init-dev.mjs",
     "build:vercel": "node scripts/build.mjs && node scripts/build-public.mjs",
     "build:near-demo": "node scripts/build-near-demo.mjs",
-    "smoke:near": "node --import ./scripts/workspace-loader.mjs scripts/smoke-near-quote.mjs"
+    "smoke:near": "node --import ./scripts/workspace-loader.mjs scripts/smoke-near-quote.mjs",
+    "compare:routes": "node --import ./scripts/workspace-loader.mjs scripts/collect-route-comparison.mjs"
   },
   "engines": {
     "node": "24.x"

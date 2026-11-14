@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir } from 'node:fs/promises';
+import { cp, mkdir, readdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,6 +11,8 @@ await mkdir(core, { recursive: true });
 for (const file of ['index.html', 'styles.css', 'app.js', 'units.js', 'presets.js', 'audit.js']) {
   await cp(join(source, file), join(output, file));
 }
+const data = join(source, 'data');
+if ((await stat(data).catch(() => null))?.isDirectory()) await cp(data, join(output, 'data'), { recursive: true });
 for (const file of await readdir(join(root, 'packages', 'core', 'dist'))) {
   if (file.endsWith('.js')) await cp(join(root, 'packages', 'core', 'dist', file), join(core, file));
 }

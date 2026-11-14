@@ -15,6 +15,7 @@
   <nav>
     <button type="button" class="on" data-jump="quote-form">Compare</button>
     <button type="button" data-jump="routes">Routes</button>
+    <button type="button" data-jump="board">Results</button>
     <button type="button" data-jump="audit">Audit</button>
     <span title="The SDK is the existing router packages. This page only compares dry quotes.">SDK</span>
   </nav>
@@ -25,7 +26,7 @@
 <main>
   <section>
     <h1>One route table.<br>NEAR Intents beside Relay.</h1>
-    <p class="lede">Compare 1Click and Relay on output, fee and ETA. The 1Click card is a dry quote: no deposit address, nothing to fund.</p>
+    <p class="lede">Compare 1Click and Relay on output, fee and ETA. The 1Click card is a dry quote: no deposit address, nothing to fund. The results table is a stored run of many pairs.</p>
     <form class="swap" id="quote-form">
       <div class="leg">
         <div class="lb"><span>You send</span><span id="source-chain">Ethereum</span></div>
@@ -57,6 +58,24 @@
     <h2>Ranked routes <span class="tag" id="pair-tag">ETH (Ethereum) → USDC (Base) · 0.05</span></h2>
     <div id="route-list"><p class="empty">No quotes yet. Compare to rank this pair.</p></div>
     <div class="cmp" id="cmp" hidden></div>
+  </section>
+  <section class="board" id="board">
+    <h2>Which route won <time class="tag" id="board-when"></time></h2>
+    <p id="board-summary" class="board-summary">Loading stored comparison…</p>
+    <div class="table-wrap">
+      <table id="board-table">
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th>1Click dry quote</th>
+            <th>Relay quote</th>
+            <th>Winner</th>
+            <th>Why</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
   <section class="audit" id="audit">
     <h2>Testnet audit <a class="tag" id="audit-tx" href="https://explorer.testnet.near.org/transactions/7zMroVw8YRQUCxZCE6DhmBUk8yvv4ehk3nQrQn1FSkib" target="_blank" rel="noreferrer">record_decision · tx 7zMroVw8…Qn1FSkib</a></h2>

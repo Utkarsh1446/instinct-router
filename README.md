@@ -1,39 +1,44 @@
 # Instinct Router
 
-## NEAR Hackathon
+## Hackathon deliverable
 
-Track: `defi`.
+NEAR Intents 1Click dry quotes, ranked head-to-head with Relay.
 
-This repository is the existing Instinct Router, a wallet-custodied cross-chain router. The hackathon work adds a NEAR Intents 1Click route provider, ranks it with the existing providers, and shows the result in a quote-only widget. It does not share code with the team's other hackathon entries (Light Swarm, Dryrun, Intents Thesis, Mutuals, 404, Receipts, Crunch Oracle).
+Tracks: `defi`, `open`.
+
+Instinct Router already compared cross-chain routes. The hackathon work adds one provider, `near-intents-1click`. It calls `POST https://1click.chaindefuser.com/v0/quote` with `dry: true` only. `DynamicRouter` ranks that quote with the existing Relay adapter on minimum output, fee, price impact, and ETA. The static page shows one fresh pair and a stored table of which route won across 20 pairs. No wallet is connected. Nothing is signed or sent.
+
+<!-- PAIRED PROJECT: lead's one other entry, if any -->
 
 ### Problem
 
-A router can show several cross-chain prices, but a NEAR Intents quote is easy to confuse with an instruction to send funds. The user needs the 1Click output, fee, and ETA next to routes such as Relay, a deposit step that cannot be funded by accident, and a record of the quote the router committed to.
+A router can show several cross-chain prices. A 1Click response can also contain a deposit address. The page has to show the 1Click output, fee, and ETA next to Relay, keep the deposit step unfundable, and record which route the ranker selected and why.
 
-### What was added
+### Compare diff
 
-- `createNearIntentsOneClickAdapter` in `@instinct/router-core`. It calls `https://1click.chaindefuser.com/v0/quote` with `dry: true` only. A response that contains `depositAddress`, `deadline`, or `timeWhenInactive` is rejected. The adapter returns output, a fee, an ETA, and a SHA-256 quote hash that `DynamicRouter` can rank against Relay.
-- A static widget at `examples/near-intents`. The 1Click card is marked `DRY QUOTE`. Its deposit line says the address was not issued, and **Send disabled** stays disabled.
-- `contracts/route-audit`, a NEAR testnet contract. `record_decision` appends a route id, quote hash, provider, output, fee, ETA, and objective. It does not hold swap funds or settle an intent.
-- Chain Signatures are not implemented. A NEAR account could later sign an origin-chain deposit with them. This demo never requests a deposit address and never signs.
+The repository was created on 2026-10-11, before the hackathon window that starts 2026-10-19. The baseline tag `pre-hackathon` is commit `6a3c4f289919c45913b7a54f65fe05735f2b1adb` (2026-10-14). Hackathon commits are on branch `near-hackathon`. The lightweight tag `hackathon-submission` points at the final hackathon commit.
 
-### Baseline and diff
+https://github.com/Utkarsh1446/instinct-router/compare/pre-hackathon...hackathon-submission
 
-The repository was created before the hackathon window. The baseline is the lightweight tag `pre-hackathon` on `6a3c4f289919c45913b7a54f65fe05735f2b1adb` (2026-10-14). Hackathon commits are on branch `near-hackathon`. The tag `hackathon-submission` points at the final hackathon commit.
+The pre-hackathon tree already included the router core, Relay, Aurora, CCTP, DEX adapters, the server, and the browser swap widget. Those packages are baseline.
 
-Compare: https://github.com/Utkarsh1446/instinct-router/compare/pre-hackathon...hackathon-submission
+Built in the hackathon window: `createNearIntentsOneClickAdapter`, the dry-quote page in `examples/near-intents`, the `contracts/route-audit` testnet contract, `scripts/collect-route-comparison.mjs`, and `examples/near-intents/data/route-comparison-2026-11-14.json`. AI assistance wrote that new code. No new runtime npm dependency was added. The contract uses `near-sdk` 5.5.0. Deployment used `near-cli-rs` 0.31.1. 1Click and Relay are called over HTTPS. No 1Click SDK is vendored.
 
-The pre-hackathon tree already included the router core, Relay, Aurora, CCTP, DEX adapters, the server, and the browser swap widget. Those packages are baseline. The NEAR Intents adapter, the dry-quote widget, the audit contract, and this section were added in the hackathon window. AI assistance was used to write that new code. No new runtime npm dependency was added. The contract uses `near-sdk` 5.5.0. Deployment used `near-cli-rs` 0.31.1. 1Click is called over HTTPS; no 1Click SDK is vendored.
+`createNearIntentsOneClickAdapter` rejects a response that contains `depositAddress`, `deadline`, or `timeWhenInactive`. It returns output, a fee, an ETA, and a SHA-256 quote hash. The page marks that card `DRY QUOTE`. **Send disabled** stays disabled. `record_decision` on the testnet contract appends a route id, quote hash, provider, output, fee, ETA, and objective. The contract does not hold swap funds or settle an intent. Chain Signatures are not implemented. This demo never requests a deposit address and never signs.
 
 ### Do this and see that
 
-1. Build the static demo (commands below) and open it.
-2. Leave the pair as ETH on Ethereum to USDC on Base, amount `0.05`, rank `Balanced`.
+Hosted page: https://instinct-router-near.pages.dev
+
+Local page, after the commands below: `http://127.0.0.1:4173`
+
+1. Open the page. See the header text `quote-only · executionAuthorized: false` and the account link `route-audit · ir1cd33a844b.testnet`.
+2. Leave the pair as ETH on Ethereum → USDC on Base, amount `0.05`, rank `Balanced`.
 3. Press **Compare dry quotes**.
-4. See one card per provider. The NEAR Intents card has a `DRY QUOTE` badge. The selected card is the one with the better ranked output, fee, and ETA. The header stays `executionAuthorized: false`.
-5. On the 1Click card, the deposit line reads `Deposit address not issued`. **Send disabled** cannot be clicked. The comparison bars use the live output, fee, and ETA.
-6. See **Testnet audit**. It links the contract and the stored sample decision. The page does not send a transaction. A new comparison shows its own quote hash locally and does not write it on chain.
-7. Change the pair to ETH on Ethereum to USDC on NEAR and compare again. Relay is not registered for NEAR. The 1Click quote is still dry.
+4. See two route cards. The NEAR Intents card has a `DRY QUOTE` badge. The deposit line reads `Deposit address not issued`. **Send disabled** does not activate. The selected card is the ranker's winner for this fresh quote. Under `Balanced`, a shorter ETA inside the 0.50% minimum-output band wins. The comparison bars use that quote's output, fee, and ETA. The header stays `executionAuthorized: false`.
+5. Open **Which route won**. See the timestamp `2026-11-14T18:43:50.764Z`. The summary is 20 pairs, objective `BALANCED`, NEAR Intents 1Click won 3, Relay won 17, no pair had zero eligible routes. Fifteen Relay wins were a shorter ETA inside the 50 bps band. Two Relay wins were a higher minimum outside that band (`ETH on Base → USDC on Ethereum`, `SOL on Solana → USDC on Ethereum`). 1Click won `ETH on Ethereum → USDC on NEAR` and `USDC on Base → USDC on NEAR` because Relay is not registered for NEAR. 1Click won `WBTC on Ethereum → USDC on Arbitrum` because the Relay adapter returned `PROVIDER_ORDER_MISMATCH` and the row has no Relay output. The same text is in `examples/near-intents/data/route-comparison-2026-11-14.json`. Pressing **Compare dry quotes** again quotes one pair and can differ from that row.
+6. Open **Testnet audit**. The row is `get_decision` for route `demo-eth-base-usdc` on `ir1cd33a844b.testnet`. The page does not send a transaction. A new comparison shows its own quote hash in the card and does not write it on chain.
+7. Press the note under the form. The pair switches to ETH on Ethereum → USDC on NEAR. Press **Compare dry quotes**. See one 1Click card with `DRY QUOTE` and **Send disabled**. Relay is not requested.
 
 Screenshots of that flow are in `docs/screenshots/`.
 
@@ -53,6 +58,13 @@ Open `http://127.0.0.1:4173`. Optional live check from the shell, which prints o
 ```sh
 npm run build
 npm run smoke:near
+```
+
+Regenerate the stored 20-pair file (live quote APIs, not part of CI):
+
+```sh
+npm run build
+npm run compare:routes
 ```
 
 Contract tests:
@@ -93,7 +105,8 @@ Quote hash preimage, UTF-8, this key order:
 
 ### Limitations
 
-- Quote-only. `dry: false` is rejected. Nothing is signed, submitted, or bridged. No mainnet contract. No production 1Click key. Unauthenticated 1Click quotes include the documented 20 bps app fee; a larger injected fee is rejected.
+- Quote-only. `dry: false` is rejected. Nothing is signed, submitted, or bridged. No mainnet contract. No production 1Click key. When 1Click returns one app fee, that fee is `feeBps` and a fee above 50 bps is rejected. When it returns no app fee, `feeBps` is the USD shortfall. On the 2026-11-14 snapshot, 1Click `feeBps` is 20 on the ETH, SOL, and WBTC pairs and 1 on the USDC-to-USDC and USDT-to-USDC pairs.
+- The **Which route won** table is the file collected at `2026-11-14T18:43:50.764Z`. The browser does not re-quote those 20 pairs. Under `BALANCED`, a shorter ETA inside the 50 bps band beats a slightly higher minimum. That is why Relay won 15 of the pairs where both quotes were eligible. 1Click's minimum was often slightly higher and still inside the band.
 - 1Click has no testnet (hackathon Q-007). Dry quotes use the production quote API and do not open a swap.
 - The 1Click signature is required to be present and is not verified against a published key.
 - Fee basis: when 1Click adds one app fee, that fee is `feeBps`. USD shortfall above it is `priceImpactBps`. 1Click does not publish a separate impact number. Costs are already included in `amountOut` and are not subtracted again.

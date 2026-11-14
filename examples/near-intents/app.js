@@ -3,6 +3,8 @@ import { PRESETS, previewBand } from './presets.js';
 import { TESTNET_AUDIT } from './audit.js';
 import { formatDuration, formatRawAmount, parseDecimalAmount } from './units.js';
 
+const COMPARISON_FILE = './data/route-comparison-2026-11-14.json';
+
 const $ = (id) => document.getElementById(id);
 let presetId = PRESETS[0].id;
 let objectiveName = 'BALANCED';
@@ -439,6 +441,83 @@ for (const button of document.querySelectorAll('[data-jump]')) {
     document.getElementById(button.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 }
+function quoteLines(quote, failure, excluded, symbol) {
+  const cell = document.createElement('td');
+  if (!quote) {
+    cell.textContent = failure ? `no quote (${failure})` : 'not asked';
+    return cell;
+  }
+  const main = document.createElement('div');
+  main.className = 'q';
+  main.textContent = `${quote.expectedOut} ${symbol}`;
+  const sub = document.createElement('div');
+  sub.className = 'sub';
+  const fee = Number.isInteger(quote.feeBps) ? `${quote.feeBps} bps` : 'fee unknown';
+  sub.textContent = `${fee} · ${formatDuration(quote.completionMs)}`;
+  cell.append(main, sub);
+  if (excluded?.length) {
+    const note = document.createElement('div');
+    note.className = 'sub';
+    note.textContent = `excluded: ${excluded.join(', ')}`;
+    cell.append(note);
+  }
+  cell.title = `minimum ${quote.minimumOut} ${symbol}`;
+  return cell;
+}
+
+function renderBoard(documentData) {
+  const when = $('board-when');
+  const summary = $('board-summary');
+  const body = document.querySelector('#board-table tbody');
+  if (!documentData?.pairs || !documentData.collectedAt) {
+    when.textContent = 'unavailable';
+    summary.textContent = 'Stored comparison did not load.';
+    return;
+  }
+  when.dateTime = documentData.collectedAt;
+  when.textContent = documentData.collectedAt;
+  summary.textContent = documentData.summary || '';
+  body.replaceChildren(...documentData.pairs.map(row => {
+    const tr = document.createElement('tr');
+    const pairCell = document.createElement('td');
+    const title = document.createElement('div');
+    title.className = 'pair';
+    title.textContent = `${row.sourceSymbol} on ${row.sourceChain} → ${row.destinationSymbol} on ${row.destinationChain}`;
+    const amount = document.createElement('div');
+    amount.className = 'sub';
+    amount.textContent = row.amount;
+    pairCell.append(title, amount);
+    const excluded = new Map((row.excluded ?? []).map(item => [item.provider, item.reasons]));
+    const failures = new Map((row.failures ?? []).map(item => [item.provider, item.code]));
+    const winner = document.createElement('td');
+    winner.className = row.winner ? 'win' : 'none';
+    winner.textContent = row.winner === 'near-intents-1click' ? '1Click' : row.winner === 'relay' ? 'Relay' : 'None';
+    const why = document.createElement('td');
+    why.className = 'why';
+    why.textContent = row.why || '';
+    tr.append(
+      pairCell,
+      quoteLines(row.quotes?.['near-intents-1click'], failures.get('near-intents-1click'), excluded.get('near-intents-1click'), row.destinationSymbol),
+      quoteLines(row.quotes?.relay, failures.get('relay'), excluded.get('relay'), row.destinationSymbol),
+      winner,
+      why,
+    );
+    return tr;
+  }));
+}
+
+async function loadBoard() {
+  try {
+    const response = await fetch(COMPARISON_FILE);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    renderBoard(await response.json());
+  } catch (error) {
+    renderBoard(null);
+    $('board-summary').textContent = `Stored comparison did not load (${error?.message || 'FETCH_FAILED'}).`;
+  }
+}
+
 $('quote-form').addEventListener('submit', compare);
 fillChrome();
 readAudit();
+loadBoard();

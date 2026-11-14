@@ -13,7 +13,9 @@
     "example": "node scripts/example-server.mjs",
     "pack": "node scripts/pack.mjs",
     "init:dev": "node scripts/init-dev.mjs",
-    "build:vercel": "node scripts/build.mjs && node scripts/build-public.mjs"
+    "build:vercel": "node scripts/build.mjs && node scripts/build-public.mjs",
+    "build:near-demo": "node scripts/build-near-demo.mjs",
+    "smoke:near": "node --import ./scripts/workspace-loader.mjs scripts/smoke-near-quote.mjs"
   },
   "engines": {
     "node": "24.x"

@@ -12,3 +12,5 @@ docs/validation/
 *.log
 .DS_Store
 .vercel
+/dist/
+contracts/route-audit/target/

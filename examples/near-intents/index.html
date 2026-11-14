@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Instinct Router · NEAR Intents dry quotes</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><span class="mark">IR</span> Instinct Router</div>
+      <div class="quiet">Quote only · NEAR testnet audit · no funds move</div>
+    </header>
+    <h1>Compare a route before anyone is paid.</h1>
+    <p class="lede">NEAR Intents 1Click is quoted with <code>dry: true</code> and ranked against Relay on output, fees, and ETA. The deposit address is not requested.</p>
+    <div class="grid">
+      <form class="card" id="quote-form">
+        <label>Pair
+          <select id="pair"></select>
+        </label>
+        <label>You pay
+          <input id="amount" inputmode="decimal" autocomplete="off" value="0.05" required>
+        </label>
+        <label>Rank by
+          <select id="objective">
+            <option value="BALANCED">Balanced — fastest inside 0.50%</option>
+            <option value="BEST_OUTPUT">Best output</option>
+            <option value="FASTEST">Fastest — fastest inside 2%</option>
+          </select>
+        </label>
+        <label>Refund address (preview)
+          <input id="sender" autocomplete="off" spellcheck="false">
+        </label>
+        <label>Recipient (preview)
+          <input id="recipient" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="quiet" id="pair-note"></p>
+        <button class="primary" id="compare" type="submit">Compare dry quotes</button>
+        <p class="quiet" id="form-status" role="status"></p>
+      </form>
+      <section aria-live="polite">
+        <div class="row"><h2 style="margin:0;font-size:14px">Routes</h2><span class="quiet" id="selection"></span></div>
+        <div class="routes" id="routes"><p class="empty">No comparison yet.</p></div>
+      </section>
+    </div>
+    <div class="lower">
+      <section class="card" id="deposit">
+        <div class="row"><h2 style="margin:0;font-size:14px">NEAR deposit address</h2><span class="badge">DRY QUOTE</span></div>
+        <p class="quiet">Origin-chain deposit flow, shown in dry mode. 1Click omits <code>depositAddress</code> when <code>dry</code> is true.</p>
+        <div class="address" id="deposit-address">Not issued — dry mode</div>
+        <div class="steps" id="steps"></div>
+        <button class="send" type="button" disabled>Send funds — disabled in dry mode</button>
+      </section>
+      <section class="card" id="audit">
+        <h2 style="margin:0;font-size:14px">Testnet audit</h2>
+        <p class="quiet">The quote hash can be stored on the route-audit contract. This page only reads it.</p>
+        <p class="hash" id="audit-body">Contract id is printed in the README after deploy.</p>
+        <p class="quiet">Chain Signatures are not used. They could sign an origin deposit from a NEAR account. No deposit address is requested, and nothing is signed.</p>
+      </section>
+    </div>
+  </div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

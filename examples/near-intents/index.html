@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Instinct Router · NEAR Intents dry quotes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<header>
+  <div class="logo"><i></i>Instinct Router</div>
+  <nav>
+    <button type="button" class="on" data-jump="quote-form">Compare</button>
+    <button type="button" data-jump="routes">Routes</button>
+    <button type="button" data-jump="board">Results</button>
+    <button type="button" data-jump="audit">Audit</button>
+    <span title="The SDK is the existing router packages. This page only compares dry quotes.">SDK</span>
+  </nav>
+  <div class="grow"></div>
+  <a class="tag" id="audit-account" href="https://explorer.testnet.near.org/accounts/ir1cd33a844b.testnet" target="_blank" rel="noreferrer"><span class="d"></span>route-audit · ir1cd33a844b.testnet</a>
+  <span class="tag">quote-only · executionAuthorized: false</span>
+</header>
+<main>
+  <section>
+    <h1>One route table.<br>NEAR Intents beside Relay.</h1>
+    <p class="lede">Compare 1Click and Relay on output, fee and ETA. The 1Click card is a dry quote: no deposit address, nothing to fund. The results table is a stored run of many pairs.</p>
+    <form class="swap" id="quote-form">
+      <div class="leg">
+        <div class="lb"><span>You send</span><span id="source-chain">Ethereum</span></div>
+        <div class="row">
+          <input id="amount" class="amt" value="0.05" inputmode="decimal" autocomplete="off" aria-label="Amount you send" required>
+          <div class="tok"><i class="eth"></i><span id="source-symbol">ETH</span></div>
+        </div>
+      </div>
+      <div class="leg">
+        <div class="flip" aria-hidden="true">↓</div>
+        <div class="lb"><span>You receive (best ranked)</span><span id="dest-chain">Base</span></div>
+        <div class="row">
+          <output class="amt" id="receive">—</output>
+          <div class="tok"><i class="usdc"></i><span id="dest-symbol">USDC</span> <small id="dest-where">on Base</small></div>
+        </div>
+      </div>
+      <div class="seg" role="group" aria-label="Rank by">
+        <button type="button" data-objective="BEST_OUTPUT">Best output</button>
+        <button type="button" class="on" data-objective="BALANCED">Balanced</button>
+        <button type="button" data-objective="FASTEST">Fastest</button>
+      </div>
+      <button class="cta" id="compare" type="submit">Compare dry quotes</button>
+      <div class="meta"><span id="provider-count">2 providers · ranked by output, fee, ETA</span><span class="mono">dry: true</span></div>
+      <p id="form-status" class="status" role="status"></p>
+    </form>
+    <button type="button" class="nb" id="pair-note">Switch the pair to USDC on NEAR: Relay is not registered there, so only the 1Click dry quote returns.</button>
+  </section>
+  <section class="routes" id="routes">
+    <h2>Ranked routes <span class="tag" id="pair-tag">ETH (Ethereum) → USDC (Base) · 0.05</span></h2>
+    <div id="route-list"><p class="empty">No quotes yet. Compare to rank this pair.</p></div>
+    <div class="cmp" id="cmp" hidden></div>
+  </section>
+  <section class="board" id="board">
+    <h2>Which route won <time class="tag" id="board-when"></time></h2>
+    <p id="board-summary" class="board-summary">Loading stored comparison…</p>
+    <div class="table-wrap">
+      <table id="board-table">
+        <thead>
+          <tr>
+            <th>Pair</th>
+            <th>1Click dry quote</th>
+            <th>Relay quote</th>
+            <th>Winner</th>
+            <th>Why</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="audit" id="audit">
+    <h2>Testnet audit <a class="tag" id="audit-tx" href="https://explorer.testnet.near.org/transactions/7zMroVw8YRQUCxZCE6DhmBUk8yvv4ehk3nQrQn1FSkib" target="_blank" rel="noreferrer">record_decision · tx 7zMroVw8…Qn1FSkib</a></h2>
+    <div class="ar" id="audit-row"><div><span>route id</span><b>Reading testnet…</b></div></div>
+  </section>
+  <div class="foot">
+    <span>The contract stores the 1Click dry-quote hash. It does not claim 1Click won.</span>
+    <div class="grow"></div>
+    <span>testnet · read only</span>
+  </div>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

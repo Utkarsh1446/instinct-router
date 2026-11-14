@@ -25,3 +25,10 @@ jobs:
       - run: npm run build:vercel
         env:
           ROUTER_PUBLIC_APP_KEY: router_public_ci_build_only
+      - run: npm run build:near-demo
+      - name: Install Rust for the testnet audit contract
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Test the route audit contract
+        run: cargo test --manifest-path contracts/route-audit/Cargo.toml --locked --features test-utils

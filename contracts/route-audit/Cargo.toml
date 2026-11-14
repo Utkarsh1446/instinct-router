@@ -1,0 +1,22 @@
+[package]
+name = "route-audit"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "NEAR testnet log of Instinct Router quote hashes. It does not custody funds or settle swaps."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+test-utils = ["near-sdk/unit-testing"]
+
+[dependencies]
+near-sdk = "=5.5.0"
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+panic = "abort"
+overflow-checks = true

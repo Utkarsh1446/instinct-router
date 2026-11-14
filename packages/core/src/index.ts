@@ -11,3 +11,4 @@ export * from './cctp-provider.js';
 export * from './runtime.js';
 export * from './raydium-provider.js';
 export * from './uniswap-v3-provider.js';
+export * from './near-intents-provider.js';
